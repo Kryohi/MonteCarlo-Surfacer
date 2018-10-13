@@ -116,7 +116,7 @@ void initializeSystem(double L, int N, double *X) {
 
 void shiftSystem(double *r, double L, int N)  {  // da sistemare
     for (int j=0; j<3*N; j++)
-        r[j] = r[j] - L*round(r[j]/L);
+        r[j] = r[j] - L*rint(r[j]/L);
 }
 
 
