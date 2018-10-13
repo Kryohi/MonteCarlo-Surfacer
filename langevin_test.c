@@ -9,7 +9,8 @@
 #include <fftw3.h>
 
 
-void initializeSystem(double L, int N, double *A);
+struct Sim sMC(int N, double rho, int maxsteps);
+void initializeBox(double L, int N, double *A);
 void vecboxMuller(double sigma, size_t N, double *A);
 void shiftSystem(double *r, double L, int N);
 double energy(double *r, double L, int N);
@@ -17,14 +18,29 @@ double pressure(double *r, double L, int N);
 double mean(double *A, size_t length);
 void elforel(double *A, double * B, double * C, size_t length);
 
+struct Sim {    // struct containing all the results of one simulation
+    double E;
+    double P;
+} sim;
+
 
 int main(int argc, char** argv)
 {
+    int maxsteps = 1000;
+    struct Sim MC1;
+    MC1 = sMC(32, 0.1, maxsteps);
+
+    printf("\n%lf\n", MC1.E);
+
+    return 0;
+}
+
+
+struct Sim sMC(int N, double rho, int maxsteps)   {
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
+
     double sim_time;
-    const int N = 32;
-    const int maxsteps = 10000;
     double * X = malloc(3*N * sizeof(double));
     double * Y = malloc(3*N * sizeof(double));
     double * E = malloc(maxsteps * sizeof(double));
@@ -36,11 +52,10 @@ int main(int argc, char** argv)
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
 
-    double rho = 0.1;
     double L = cbrt(N/rho);
     double a = L/(int)(cbrt(N/4));
 
-    initializeSystem(L, N, X);
+    initializeBox(L, N, X);
 
     // Thermalization
 
@@ -66,22 +81,29 @@ int main(int argc, char** argv)
 
     // Opens csv file where it then writes a table with the data
     FILE *data = fopen("data.csv", "w");
-    if (data == NULL || positions == NULL) return -1;
+    if (data == NULL || positions == NULL)
+        perror("error while writing on data.csv");
 
     for (int i=0; i<maxsteps; i++)
-        fprintf(data, "%0.18lf,%0.18lf,%0.18lf\n", E[i], P[i], jj[i]);    // writes in the .csv file
+        fprintf(data, "%0.18lf,%0.18lf,%0.18lf\n", E[i], P[i], jj[i]);
 
+    // Create struct of the mean values and deviations
+    struct Sim results;
+    results.E = 42.0;
+    results.P = mean(P, maxsteps);
 
     // frees the allocated memory
     free(X); free(Y); free(E); free(P); free(jj);
-    return 0;
+
+    return results;
 }
 
 
-void initializeSystem(double L, int N, double *X) {
+void initializeBox(double L, int N, double *X) {
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
     double a = L / Na;  // passo reticolare
-    (Na != cbrt(N/4)) && printf("Can't make a cubic FCC crystal with this N :(");
+    if (Na != cbrt(N/4))
+        perror("Can't make a cubic FCC crystal with this N :(");
 
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
@@ -113,10 +135,8 @@ void initializeSystem(double L, int N, double *X) {
     shiftSystem(X,L,N);
 }
 
+void initializeCavity(double L, int N, double *X) {
 
-void shiftSystem(double *r, double L, int N)  {  // da sistemare
-    for (int j=0; j<3*N; j++)
-        r[j] = r[j] - L*round(r[j]/L);
 }
 
 
@@ -158,6 +178,11 @@ double pressure(double *r, double L, int N)  {
     return -P/(3*L*L*L);
 }
 
+
+void shiftSystem(double *r, double L, int N)  {  // da sistemare
+    for (int j=0; j<3*N; j++)
+        r[j] = r[j] - L*rint(r[j]/L);
+}
 
 void vecboxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
     double x1, x2;
@@ -201,6 +226,9 @@ void fft_acf(double *H, int k_max, size_t length, double * acf)   {
 }
 
 
+/*
+    Mathematics rubbish
+*/
 
 double sum(double * A, size_t length)   {
     double s = 0.;
