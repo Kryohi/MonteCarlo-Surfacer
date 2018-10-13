@@ -1,11 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <signal.h> //for sigterm signal handling
+#include <signal.h>
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <complex.h>
 #include <fftw3.h>
+
 
 double * initializeSystem(double *X, double L, int N);
 void shiftSystem(double *r, double L, int N);
@@ -13,9 +15,9 @@ double energy(double *r, double L, int N);
 double pressure(double *r, double L, int N);
 
 
-int main()
+int main(int argc, char** argv)
 {
-    
+    srand(time(NULL));  // metterne uno per processo MPI
     const int N = 32;
     const int maxsteps = 10^5;
     double * X = malloc(3*N * sizeof(double));
@@ -132,6 +134,46 @@ double pressure(double *r, double L, int N)  {
     return -P/(3*L*L*L);
 }
 
+void vecboxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
+    double x1, x2;
+    
+    for (int i=0; i<round(N/2); i++) {
+        x1 = rand()/RAND_MAX;
+        x2 = rand()/RAND_MAX;
+        A[2*i] = sqrt(-2*sigma*log(1-x1))*cos(2*M_PI*x2);
+        A[2*i+1] = sqrt(-2*sigma*log(1-x2))*sin(2*M_PI*x1);
+    }
+}
+
+void fft_acf(double *H, int k_max, size_t length, double * acf)   {
+    
+    fftw_plan p;
+    int lftt = length/2+1
+    double * Z = fftw_malloc(length * sizeof(double));
+    double * fvi = fftw_malloc(lfft * sizeof(fftw_complex));
+    double * gnam = fftw_malloc(length * sizeof(double));
+    double * C_H = fftw_malloc(lfft * sizeof(fftw_complex));
+    
+    double meanH = mean(H);
+    for (int i=0; i<length; i++)
+        Z[i] = H[i] - meanH;
+    
+    p = fftw_plan_dft_r2c_1d(lfft, Z, fvi, FFTW_FORWARD);
+    fftw_execute(p);
+    
+    elforelcpx(fvi, conj(fvi), gnam);  // compute the abs2 of the transform
+    
+    p = fftw_plan_dft_r2c_1d(lfft, gnam, C_H, FFTW_BACKWARD);
+    fftw_execute(p);
+    
+    for (int i=0; i<k_max; i++)
+        acf[i] = creal(C_H[i]) / creal(C_H[1]);
+
+    
+    fftw_destroy_plan(p);
+    fftw_free(in); fftw_free(out);
+    return acf
+}
 
 
 double dot(double * A, double * B, size_t length)  {
@@ -142,13 +184,9 @@ double dot(double * A, double * B, size_t length)  {
         
     return result;
 }
-double * elforel(double * A, double * B, size_t length)  {  // sistemare memoria passando indirizzo risultato
-    double *C = malloc(length * sizeof(double));
-    
+void elforel(double * A, double * B, double * C, size_t length)  {  
     for (int i=0; i<length; i++)
         C[i] = A[i]*B[i];
-        
-    return C;
 }
 double mean(double * A, size_t length) {
     double result = 0.0;
@@ -162,6 +200,10 @@ double media(double * A, size_t length) {
     return birra;
 }
 double variance(double * A, size_t length)  {
-    return mean(elforel(A,A,length),length) - mean(A,length)*mean(A,length);
+    double * A2 = malloc(length * sizeof(double));
+    elforel(A,A,A2,length);
+    double var = mean(A2,length) - mean(A,length)*mean(A,length);
+    free(A2);
+    return var;
 }
 
