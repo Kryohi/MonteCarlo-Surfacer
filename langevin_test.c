@@ -1,13 +1,14 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <errno.h>
 #include <stdbool.h>
+#include <errno.h>
 #include <signal.h>
 #include <math.h>
 #include <time.h>
 #include <string.h>
 #include <complex.h>
 #include <fftw3.h>
+// + usare argp?
 
 
 struct Sim sMC(int N, double rho, int maxsteps);
@@ -19,7 +20,7 @@ double pressure(double *r, double L, int N);
 double mean(double *A, size_t length);
 void elforel(double *A, double * B, double * C, size_t length);
 
-struct Sim {    // struct containing all the results of one simulation
+struct Sim {    // struct containing all the useful results of one simulation
     double E;
     double P;
 } sim;
@@ -136,7 +137,7 @@ void initializeBox(double L, int N, double *X) {
     shiftSystem(X,L,N);
 }
 
-void initializeCavity(double L, int N, double *X) {
+void initializeCavity(double L, int N, double *X) { // da rendere rettangolare?
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
     if (Na != cbrt(N/4))
@@ -184,7 +185,7 @@ double energy(double *r, double L, int N)  {
             dy = r[3*l+1] - r[3*i+1];
             dy = dy - L*rint(dy/L);
             dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L);
+            dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
             if (dr2 < L*L/4)
                 V += 4*(1.0/pow(pow(dr2,3.),2.) - 1.0/(dr2*dr2*dr2));
@@ -197,10 +198,10 @@ double wallsEnergy(double *r, double L, int N)  {
     double V = 0.0;
     double c, d, dz2;
     for (int n=0; n<N; n++)  {
-            c = ;
-            d = ;
-            dz2 = r[3*n+2] * r[3*n+2]
-            V += 4*(1.0/pow(pow(dz2,3.),2.) - 1.0/(dz2*dz2*dz2));
+            c = 1.;
+            d = 1.;
+            dz2 = r[3*n+2] * r[3*n+2];
+            V += 4*c * (d/pow(pow(dz2,3.),2.) - 1.0/(dz2*dz2*dz2));
     }
     return V;
 }
