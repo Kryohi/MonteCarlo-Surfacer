@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <signal.h>
 #include <math.h>
@@ -77,7 +78,7 @@ struct Sim sMC(int N, double rho, int maxsteps)   {
     }
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("\nTime: %lf s\n\n", sim_time);  // mettere in funzione
+    printf("\nTime: %lf s\n\n", sim_time);  // da sbattere in funzione riutilizzabile
 
     // Opens csv file where it then writes a table with the data
     FILE *data = fopen("data.csv", "w");
@@ -101,7 +102,7 @@ struct Sim sMC(int N, double rho, int maxsteps)   {
 
 void initializeBox(double L, int N, double *X) {
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
-    double a = L / Na;  // passo reticolare
+    double a = L / Na;  // interparticle distance
     if (Na != cbrt(N/4))
         perror("Can't make a cubic FCC crystal with this N :(");
 
@@ -136,7 +137,40 @@ void initializeBox(double L, int N, double *X) {
 }
 
 void initializeCavity(double L, int N, double *X) {
+    int Na = (int)(cbrt(N/4)); // number of cells per dimension
+    double a = L / Na;  // interparticle distance
+    if (Na != cbrt(N/4))
+        perror("Can't make a cubic FCC crystal with this N :(");
 
+
+    for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
+        for (int j=0; j<Na; j++)    {
+            for (int k=0; k<Na; k++)    {
+                int n = i*Na*Na + j*Na + k; // unique number for each triplet i,j,k
+                X[n*12+0] = a*i;
+                X[n*12+1] = a*j;
+                X[n*12+2] = a*k;
+
+                X[n*12+3] = a*i + a/2;
+                X[n*12+4] = a*j + a/2;
+                X[n*12+5] = a*k;
+
+                X[n*12+6] = a*i + a/2;
+                X[n*12+7] = a*j;
+                X[n*12+8] = a*k + a/2;
+
+                X[n*12+9] = a*i;
+                X[n*12+10] = a*j + a/2;
+                X[n*12+11] = a*k + a/2;
+            }
+        }
+    }
+
+    for (int n=0; n<3*N; n++)
+        X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
+
+
+    shiftSystem(X,L,N);
 }
 
 
@@ -159,6 +193,19 @@ double energy(double *r, double L, int N)  {
     return V;
 }
 
+double wallsEnergy(double *r, double L, int N)  {
+    double V = 0.0;
+    double c, d, dz2;
+    for (int n=0; n<N; n++)  {
+            c = ;
+            d = ;
+            dz2 = r[3*n+2] * r[3*n+2]
+            V += 4*(1.0/pow(pow(dz2,3.),2.) - 1.0/(dz2*dz2*dz2));
+    }
+    return V;
+}
+
+
 double pressure(double *r, double L, int N)  {
     double P = 0.0;
     double dx, dy, dz, dr2;
@@ -179,10 +226,18 @@ double pressure(double *r, double L, int N)  {
 }
 
 
-void shiftSystem(double *r, double L, int N)  {  // da sistemare
+void shiftSystem(double *r, double L, int N)  {  // da ricontrollare
     for (int j=0; j<3*N; j++)
         r[j] = r[j] - L*rint(r[j]/L);
 }
+
+void shiftSystem2D(double *r, double L, int N)  {  // da ricontrollare
+    for (int j=0; j<N; j++) {
+        r[3*j] = r[3*j] - L*rint(r[3*j]/L);
+        r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
+    }
+}
+
 
 void vecboxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
     double x1, x2;
