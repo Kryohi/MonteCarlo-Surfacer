@@ -16,7 +16,7 @@
 
 
 struct Sim sMC(int N, double rho, double *W, int maxsteps);
-void vecboxMuller(double sigma, size_t N, double *A);
+void vecBoxMuller(double sigma, size_t N, double *A);
 void shiftSystem(double *r, double L, int N);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
 void initializeBox(double L, int N, double *X);
@@ -40,7 +40,6 @@ int main(int argc, char** argv)
     int N = 32;
     double rho = 0.1;
     double L = cbrt(N/rho);
-    struct Sim MC1;
     
     // contains the parameters c and d for every piece of the wall
     double * W = malloc(2*M * sizeof(double));
@@ -53,6 +52,7 @@ int main(int argc, char** argv)
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
 
+    struct Sim MC1;
     
     MC1 = sMC(N, rho, W, maxsteps);
 
@@ -217,8 +217,8 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
     double * X0 = malloc(M * sizeof(double));
     double * YM = malloc(M * sizeof(double));
     
-    vecboxMuller(x0sigma, M, X0);
-    vecboxMuller(ymsigma, M, YM);
+    vecBoxMuller(x0sigma, M, X0);
+    vecBoxMuller(ymsigma, M, YM);
     
     for (int l=0; l<M; l++)  {
         W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ym)*(YM[l]+ym);
@@ -340,7 +340,7 @@ void shiftSystem2D(double *r, double L, int N)  {  // da ricontrollare
 }
 
 
-void vecboxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
+void vecBoxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
     double x1, x2;
 
     for (int i=0; i<round(3*N/2); i++) {
