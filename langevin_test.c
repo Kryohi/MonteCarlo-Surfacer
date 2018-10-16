@@ -11,14 +11,22 @@
 // + usare argp?
 
 
-struct Sim sMC(int N, double rho, int maxsteps);
-void initializeBox(double L, int N, double *A);
+// number of slices for the potential of the walls
+#define M 42
+
+
+struct Sim sMC(int N, double rho, double *W, int maxsteps);
 void vecboxMuller(double sigma, size_t N, double *A);
 void shiftSystem(double *r, double L, int N);
+void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
+void initializeBox(double L, int N, double *X);
+void forces(double *r, double L, int N, double *F);
+void wallsForces(double *r, double *W, double L, int N, double *F);
 double energy(double *r, double L, int N);
 double pressure(double *r, double L, int N);
 double mean(double *A, size_t length);
 void elforel(double *A, double * B, double * C, size_t length);
+
 
 struct Sim {    // struct containing all the useful results of one simulation
     double E;
@@ -29,21 +37,40 @@ struct Sim {    // struct containing all the useful results of one simulation
 int main(int argc, char** argv)
 {
     int maxsteps = 1000;
+    int N = 32;
+    double rho = 0.1;
+    double L = cbrt(N/rho);
     struct Sim MC1;
-    MC1 = sMC(32, 0.1, maxsteps);
+    
+    // contains the parameters c and d for every piece of the wall
+    double * W = malloc(2*M * sizeof(double));
+    
+    // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
+    double x0m = 1.0;
+    double x0sigma = 0.2;
+    double ym = 1.2;
+    double ymsigma = 0.3;
+    
+    initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
+
+    
+    MC1 = sMC(N, rho, W, maxsteps);
 
     printf("\n%lf\n", MC1.E);
-
+    
+    free(W);
     return 0;
 }
 
 
-struct Sim sMC(int N, double rho, int maxsteps)   {
+struct Sim sMC(int N, double rho, double *W, int maxsteps)   {
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
-
+    
     double sim_time;
+    // contains the initial particle positions
     double * X = malloc(3*N * sizeof(double));
+    // contains the proposed particle positions
     double * Y = malloc(3*N * sizeof(double));
     double * E = malloc(maxsteps * sizeof(double));
     double * P = malloc(maxsteps * sizeof(double));
@@ -53,15 +80,19 @@ struct Sim sMC(int N, double rho, int maxsteps)   {
     for (int n=0; n<N; n++)
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
-
+    
+    
+    // System initialization
     double L = cbrt(N/rho);
     double a = L/(int)(cbrt(N/4));
-
-    initializeBox(L, N, X);
-
+    
+    initializeBox(L, N, X); // da sostituire con cavity
+    
+    
     // Thermalization
 
 
+    
     // Actual simulation
     start = clock();
 
@@ -81,6 +112,7 @@ struct Sim sMC(int N, double rho, int maxsteps)   {
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     printf("\nTime: %lf s\n\n", sim_time);  // da sbattere in funzione riutilizzabile
 
+    
     // Opens csv file where it then writes a table with the data
     FILE *data = fopen("data.csv", "w");
     if (data == NULL || positions == NULL)
@@ -174,6 +206,75 @@ void initializeCavity(double L, int N, double *X) { // da rendere rettangolare?
     shiftSystem(X,L,N);
 }
 
+/*
+ Takes average and standard deviation of the distance from the y-axis and of the maximum binding energy
+ and puts in the W array two gaussian distributions of those parameters
+*/
+// Per ora divide la parete in M fettine rettangolari
+
+void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    {
+
+    double * X0 = malloc(M * sizeof(double));
+    double * YM = malloc(M * sizeof(double));
+    
+    vecboxMuller(x0sigma, M, X0);
+    vecboxMuller(ymsigma, M, YM);
+    
+    for (int l=0; l<M; l++)  {
+        W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ym)*(YM[l]+ym);
+        W[2*l+1] = pow(X0[l]+x0m, 6.0) * (YM[l]+ym);
+    }
+    
+    free(X0); free(YM);
+}
+
+
+void forces(double *r, double L, int N, double *F) {
+    
+    double dx, dy, dz, dr2, dV;
+
+    for (int l=0; l<N; l++)  {
+         for (int i=0; i<l; i++)   {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)    {
+                //dV = -der_LJ(sqrt(dr2))
+                dV = -24*(1.0/(dr2*dr2*dr2*dr2)) + 48*1.0/pow(dr2,7.0);
+                F[3*l+0] += dV*dx;
+                F[3*l+1] += dV*dy;
+                F[3*l+2] += dV*dz;
+                F[3*i+0] -= dV*dx;
+                F[3*i+1] -= dV*dy;
+                F[3*i+2] -= dV*dz;
+            }
+        }
+    }
+}
+
+
+// sentire forza da tutti i segmenti? Solo quelli più vicini?
+
+void wallsForces(double *r, double *W, double L, int N, double *F) { 
+    
+    double dx, dy, dz, dr2, dV;
+     
+    for (int n=0; n<N; n++)  {
+            if (dr2 < L*L/4)    {
+                //dV = -der_LJ(sqrt(dr2))
+                dV = -24 * W[1] / (dr2*dr2*dr2*dr2) + 48 * W[2] / pow(dr2,7.0);
+                F[3*n+0] += dV*dx;
+                F[3*n+1] += dV*dy;
+                F[3*n+2] += dV*dz;
+            }
+    }
+}
+
+
 
 double energy(double *r, double L, int N)  {
     double V = 0.0;
@@ -194,17 +295,16 @@ double energy(double *r, double L, int N)  {
     return V;
 }
 
-double wallsEnergy(double *r, double L, int N)  {
+double wallsEnergy(double *r, double *W, double L, int N)  {
     double V = 0.0;
-    double c, d, dz2;
+    double dz2;
     for (int n=0; n<N; n++)  {
-            c = 1.;
-            d = 1.;
             dz2 = r[3*n+2] * r[3*n+2];
-            V += 4*c * (d/pow(pow(dz2,3.),2.) - 1.0/(dz2*dz2*dz2));
+            V += 4 * (W[1] / pow(pow(dz2,3.),2.) - W[2] / (dz2*dz2*dz2));
     }
     return V;
 }
+
 
 
 double pressure(double *r, double L, int N)  {
