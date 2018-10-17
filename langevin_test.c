@@ -15,7 +15,7 @@
 #define M 42
 
 
-struct Sim sMC(int N, double rho, double *W, int maxsteps);
+struct Sim sMC(int N, double rho, double T, double *W, int maxsteps);
 void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double *r, double L, int N);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
@@ -40,6 +40,7 @@ int main(int argc, char** argv)
     int maxsteps = 1000;
     int N = 32;
     double rho = 0.1;
+    double T = 0.3;
     double L = cbrt(N/rho);
     
     // contains the parameters c and d for every piece of the wall
@@ -55,7 +56,7 @@ int main(int argc, char** argv)
 
     struct Sim MC1;
     
-    MC1 = sMC(N, rho, W, maxsteps);
+    MC1 = sMC(N, rho, T, W, maxsteps);
 
     printf("\n%lf\n", MC1.E);
     
@@ -64,12 +65,12 @@ int main(int argc, char** argv)
 }
 
 
-struct Sim sMC(int N, double rho, double *W, int maxsteps)   
+struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)   
 {
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
     
-    double sim_time;
+    double sim_time, eta;
     // contains the initial particle positions
     double * X = malloc(3*N * sizeof(double));
     // contains the proposed particle positions
@@ -86,8 +87,12 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)
     
     
     // System initialization
+    double d = 2e-3;
+    double g = 0.065;
     double L = cbrt(N/rho);
     double a = L/(int)(cbrt(N/4));
+    double A = g*T;
+    double s = sqrt(4*A*d)/g;
     
     initializeBox(L, N, X); // da sostituire con cavity
     
@@ -99,14 +104,24 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)
     // Actual simulation
     start = clock();
 
-    for (int i=0; i<3; i++)
+    for (int n=0; n<3; n++)
     {
+        E[n] = energy(X, L, N);
+        markovProbability(X, Y, L, N, T, s, d, ap);
+        
+        for (int i=0; i<3*N; i++)   {
+            eta = rand();
+            if (eta < ap[i])
+            {
+                X[i] = Y[i];
+                jj[n] += 1;
+            }
+        }
 
-        //vecboxMuller(1.0, N, X);
-
-        printf("%f\t%f\t%f\n", E[i], P[i], jj[i]);
-        for (int n=0; n<3*N; n++)
-            fprintf(positions, "%0.18lf,", X[n]);
+        // mettere in ciclo for separato?
+        printf("%f\t%f\t%f\n", E[n], P[n], jj[n]);
+        for (int i=0; i<3*N; i++)
+            fprintf(positions, "%0.18lf,", X[i]);
 
         fprintf(positions, "\n");
 
