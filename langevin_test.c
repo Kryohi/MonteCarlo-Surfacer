@@ -15,11 +15,12 @@
 #define M 42
 
 
-struct Sim sMC(int N, double rho, double *W, int maxsteps);
-void vecBoxMuller(double sigma, size_t N, double *A);
+struct Sim sMC(int N, double rho, double T, double *W, int maxsteps);
+void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double *r, double L, int N);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
 void initializeBox(double L, int N, double *X);
+void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap);
 void forces(double *r, double L, int N, double *F);
 void wallsForces(double *r, double *W, double L, int N, double *F);
 double energy(double *r, double L, int N);
@@ -39,6 +40,7 @@ int main(int argc, char** argv)
     int maxsteps = 1000;
     int N = 32;
     double rho = 0.1;
+    double T = 0.3;
     double L = cbrt(N/rho);
     
     // contains the parameters c and d for every piece of the wall
@@ -54,7 +56,7 @@ int main(int argc, char** argv)
 
     struct Sim MC1;
     
-    MC1 = sMC(N, rho, W, maxsteps);
+    MC1 = sMC(N, rho, T, W, maxsteps);
 
     printf("\n%lf\n", MC1.E);
     
@@ -63,15 +65,17 @@ int main(int argc, char** argv)
 }
 
 
-struct Sim sMC(int N, double rho, double *W, int maxsteps)   {
+struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)   
+{
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
     
-    double sim_time;
+    double sim_time, eta;
     // contains the initial particle positions
     double * X = malloc(3*N * sizeof(double));
     // contains the proposed particle positions
     double * Y = malloc(3*N * sizeof(double));
+    double * ap = malloc(3*N * sizeof(double)); // oppure lungo solo N?
     double * E = malloc(maxsteps * sizeof(double));
     double * P = malloc(maxsteps * sizeof(double));
     double * jj = malloc(maxsteps * sizeof(double));
@@ -83,8 +87,12 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)   {
     
     
     // System initialization
+    double d = 2e-3;
+    double g = 0.065;
     double L = cbrt(N/rho);
     double a = L/(int)(cbrt(N/4));
+    double A = g*T;
+    double s = sqrt(4*A*d)/g;
     
     initializeBox(L, N, X); // da sostituire con cavity
     
@@ -96,14 +104,24 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)   {
     // Actual simulation
     start = clock();
 
-    for (int i=0; i<3; i++)
+    for (int n=0; n<3; n++)
     {
+        E[n] = energy(X, L, N);
+        markovProbability(X, Y, L, N, T, s, d, ap);
+        
+        for (int i=0; i<3*N; i++)   {
+            eta = rand();
+            if (eta < ap[i])
+            {
+                X[i] = Y[i];
+                jj[n] += 1;
+            }
+        }
 
-        //vecboxMuller(1.0, N, X);
-
-        printf("%f\t%f\t%f\n", E[i], P[i], jj[i]);
-        for (int n=0; n<3*N; n++)
-            fprintf(positions, "%0.18lf,", X[n]);
+        // mettere in ciclo for separato?
+        printf("%f\t%f\t%f\n", E[n], P[n], jj[n]);
+        for (int i=0; i<3*N; i++)
+            fprintf(positions, "%0.18lf,", X[i]);
 
         fprintf(positions, "\n");
 
@@ -133,7 +151,40 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)   {
 }
 
 
-void initializeBox(double L, int N, double *X) {
+void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap)  
+{
+    double * gauss = malloc(3*N * sizeof(double));
+    double * FX = malloc(3*N * sizeof(double));
+    double * FY = malloc(3*N * sizeof(double));
+    double * displacement = malloc(3*N * sizeof(double));
+    double * WX = malloc(3*N * sizeof(double));
+    double * WY = malloc(3*N * sizeof(double));
+    
+    vecBoxMuller(s, 3*N, gauss);
+    forces(X, L, N, FX);
+    
+    // Proposal
+    for (int i=0; i<3*N; i++)
+    {
+        Y[i] = X[i] + d*FX[i] + gauss[i]*s;     // force da dividere per γ?
+        displacement[i] = Y[i] - X[i];   // usare shiftSystem() anche su questo?
+    }
+    
+    shiftSystem(Y, L, N);
+    forces(Y, L, N, FY);
+    
+    // Acceptance probability calculation
+    for (int i=0; i<3*N; i++)     // DA SISTEMARE
+    {
+        WX[i] = (displacement[i] - FX[i]*d) * (displacement[i] - FX[i]*d);  // controllare segni
+        WY[i] = (- displacement[i] - FY[i]*d) * (- displacement[i] - FY[i]*d);
+        
+        ap[i] = exp((energies(X,L) - energies(Y,L))/T + (WX[i]-WY[i])/(4*d*T));
+    }
+}
+
+void initializeBox(double L, int N, double *X) 
+{
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
     if (Na != cbrt(N/4))
@@ -169,7 +220,8 @@ void initializeBox(double L, int N, double *X) {
     shiftSystem(X,L,N);
 }
 
-void initializeCavity(double L, int N, double *X) { // da rendere rettangolare?
+void initializeCavity(double L, int N, double *X) // da rendere rettangolare?
+{ 
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
     if (Na != cbrt(N/4))
@@ -212,8 +264,8 @@ void initializeCavity(double L, int N, double *X) { // da rendere rettangolare?
 */
 // Per ora divide la parete in M fettine rettangolari
 
-void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    {
-
+void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    
+{
     double * X0 = malloc(M * sizeof(double));
     double * YM = malloc(M * sizeof(double));
     
@@ -229,8 +281,8 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
 }
 
 
-void forces(double *r, double L, int N, double *F) {
-    
+void forces(double *r, double L, int N, double *F) 
+{
     double dx, dy, dz, dr2, dV;
 
     for (int l=0; l<N; l++)  {
@@ -259,8 +311,8 @@ void forces(double *r, double L, int N, double *F) {
 
 // sentire forza da tutti i segmenti? Solo quelli più vicini?
 
-void wallsForces(double *r, double *W, double L, int N, double *F) { 
-    
+void wallsForces(double *r, double *W, double L, int N, double *F) 
+{ 
     double dx, dy, dz, dr2, dV;
      
     for (int n=0; n<N; n++)  {
@@ -276,7 +328,8 @@ void wallsForces(double *r, double *W, double L, int N, double *F) {
 
 
 
-double energy(double *r, double L, int N)  {
+double energy(double *r, double L, int N)  
+{
     double V = 0.0;
     double dx, dy, dz, dr2;
     for (int l=0; l<N; l++)  {
@@ -295,7 +348,8 @@ double energy(double *r, double L, int N)  {
     return V;
 }
 
-double wallsEnergy(double *r, double *W, double L, int N)  {
+double wallsEnergy(double *r, double *W, double L, int N)  
+{
     double V = 0.0;
     double dz2;
     for (int n=0; n<N; n++)  {
@@ -307,7 +361,8 @@ double wallsEnergy(double *r, double *W, double L, int N)  {
 
 
 
-double pressure(double *r, double L, int N)  {
+double pressure(double *r, double L, int N)  
+{
     double P = 0.0;
     double dx, dy, dz, dr2;
     for (int l=0; l<N; l++)  {
@@ -327,12 +382,14 @@ double pressure(double *r, double L, int N)  {
 }
 
 
-void shiftSystem(double *r, double L, int N)  {  // da ricontrollare
+void shiftSystem(double *r, double L, int N)  // da ricontrollare
+{
     for (int j=0; j<3*N; j++)
         r[j] = r[j] - L*rint(r[j]/L);
 }
 
-void shiftSystem2D(double *r, double L, int N)  {  // da ricontrollare
+void shiftSystem2D(double *r, double L, int N)  // da ricontrollare
+{
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);
         r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
@@ -340,10 +397,11 @@ void shiftSystem2D(double *r, double L, int N)  {  // da ricontrollare
 }
 
 
-void vecBoxMuller(double sigma, size_t N, double * A)  {   // confrontare con dSFMT
+void vecBoxMuller(double sigma, size_t length, double * A)  // confrontare con dSFMT
+{
     double x1, x2;
 
-    for (int i=0; i<round(3*N/2); i++) {
+    for (int i=0; i<round(length/2); i++) {
         x1 = (double)rand() / (double)RAND_MAX;
         x2 = (double)rand() / (double)RAND_MAX;
         A[2*i] = sqrt(-2*sigma*log(1-x1))*cos(2*M_PI*x2);
@@ -351,8 +409,8 @@ void vecBoxMuller(double sigma, size_t N, double * A)  {   // confrontare con dS
     }
 }
 
-void fft_acf(double *H, int k_max, size_t length, double * acf)   {
-
+void fft_acf(double *H, int k_max, size_t length, double * acf)   
+{
     fftw_plan p;
     int lfft = length/2+1;
     double * Z = fftw_malloc(length * sizeof(double));
