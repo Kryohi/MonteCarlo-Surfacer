@@ -20,7 +20,7 @@ void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double *r, double L, int N);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
 void initializeBox(double L, int N, double *X);
-void markovProbability(double *X, double L, int N, double T, double s, double d, double *ap);
+void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap);
 void forces(double *r, double L, int N, double *F);
 void wallsForces(double *r, double *W, double L, int N, double *F);
 double energy(double *r, double L, int N);
@@ -136,10 +136,9 @@ struct Sim sMC(int N, double rho, double *W, int maxsteps)
 }
 
 
-void markovProbability(double *X, double L, int N, double T, double s, double d, double *ap)  
+void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap)  
 {
     double * gauss = malloc(3*N * sizeof(double));
-    double * Y = malloc(3*N * sizeof(double));
     double * FX = malloc(3*N * sizeof(double));
     double * FY = malloc(3*N * sizeof(double));
     double * displacement = malloc(3*N * sizeof(double));
