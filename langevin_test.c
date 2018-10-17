@@ -37,7 +37,7 @@ struct Sim {    // struct containing all the useful results of one simulation
 
 int main(int argc, char** argv)
 {
-    int maxsteps = 1000;
+    int maxsteps = 10;
     int N = 32;
     double rho = 0.1;
     double T = 0.3;
@@ -104,9 +104,11 @@ struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)
     // Actual simulation
     start = clock();
 
-    for (int n=0; n<3; n++)
+    for (int n=0; n<maxsteps; n++)
     {
         E[n] = energy(X, L, N);
+        P[n] = pressure(X, L, N);
+        
         markovProbability(X, Y, L, N, T, s, d, ap);
         
         for (int i=0; i<3*N; i++)   {
@@ -145,7 +147,7 @@ struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)
     results.P = mean(P, maxsteps);
 
     // frees the allocated memory
-    free(X); free(Y); free(E); free(P); free(jj);
+    free(X); free(Y); free(E); free(P); free(jj); free(ap);
 
     return results;
 }
