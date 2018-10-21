@@ -15,18 +15,18 @@
 #define M 42
 
 
-struct Sim sMC(int N, double rho, double T, double *W, int maxsteps);
+struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps);
 void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double *r, double L, int N);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
 void initializeBox(double L, int N, double *X);
-void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap);
-void forces(double *r, double L, int N, double *F);
-void wallsForces(double *r, double *W, double L, int N, double *F);
-double energy(double *r, double L, int N);
-double pressure(double *r, double L, int N);
-double mean(double *A, size_t length);
-void elforel(double *A, double * B, double * C, size_t length);
+void markovProbability(const double *X, double *Y, double L, int N, double T, double s, double d, double *ap);
+void forces(const double *r, double L, int N, double *F);
+void wallsForces(const double *r, const double *W, double L, int N, double *F);
+double energy(const double *r, double L, int N);
+double pressure(const double *r, double L, int N);
+double mean(const double *A, size_t length);
+void elforel(const double *A, const double * B, double * C, size_t length);
 
 
 struct Sim {    // struct containing all the useful results of one simulation
@@ -65,7 +65,7 @@ int main(int argc, char** argv)
 }
 
 
-struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)   
+struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps)   
 {
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
@@ -130,7 +130,7 @@ struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)
     }
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("\nTime: %lf s\n\n", sim_time);  // da sbattere in funzione riutilizzabile
+    printf("\nTime: %lf s\n\n", sim_time);
 
     
     // Opens csv file where it then writes a table with the data
@@ -153,11 +153,13 @@ struct Sim sMC(int N, double rho, double T, double *W, int maxsteps)
 }
 
 
-void markovProbability(double *X, double *Y, double L, int N, double T, double s, double d, double *ap)  
+void markovProbability(const double *X, double *Y, double L, int N, double T, double s, double d, double *ap)  
 {
     double * gauss = malloc(3*N * sizeof(double));
     double * FX = malloc(3*N * sizeof(double));
     double * FY = malloc(3*N * sizeof(double));
+    zeros(N*3, FX); // puts FX array to all zeros
+    zeros(N*3, FY); // puts FY array to all zeros
     double * displacement = malloc(3*N * sizeof(double));
     double * WX = malloc(3*N * sizeof(double));
     double * WY = malloc(3*N * sizeof(double));
@@ -222,6 +224,8 @@ void initializeBox(double L, int N, double *X)
     shiftSystem(X,L,N);
 }
 
+
+// TODO
 void initializeCavity(double L, int N, double *X) // da rendere rettangolare?
 { 
     int Na = (int)(cbrt(N/4)); // number of cells per dimension
@@ -276,14 +280,14 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
     
     for (int l=0; l<M; l++)  {
         W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ym)*(YM[l]+ym);
-        W[2*l+1] = pow(X0[l]+x0m, 6.0) * (YM[l]+ym);
+        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ym);
     }
     
     free(X0); free(YM);
 }
 
 
-void forces(double *r, double L, int N, double *F) 
+void forces(const double *r, double L, int N, double *F) 
 {
     double dx, dy, dz, dr2, dV;
 
@@ -311,9 +315,16 @@ void forces(double *r, double L, int N, double *F)
 }
 
 
+/*
+ * Calculate the force exerted on the particles by the surface.
+ * Be careful, it doesn't initialize F to zero, it only adds.
+ * 
+*/
+
+// TODO
 // sentire forza da tutti i segmenti? Solo quelli più vicini?
 
-void wallsForces(double *r, double *W, double L, int N, double *F) 
+void wallsForces(const double *r, const double *W, double L, int N, double *F) 
 { 
     double dx, dy, dz, dr2, dV;
      
@@ -330,7 +341,7 @@ void wallsForces(double *r, double *W, double L, int N, double *F)
 
 
 
-double energy(double *r, double L, int N)  
+double energy(const double *r, double L, int N)  
 {
     double V = 0.0;
     double dx, dy, dz, dr2;
@@ -344,26 +355,26 @@ double energy(double *r, double L, int N)
             dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
             if (dr2 < L*L/4)
-                V += 4*(1.0/pow(pow(dr2,3.),2.) - 1.0/(dr2*dr2*dr2));
+                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
         }
     }
-    return V;
+    return V*4;
 }
 
-double wallsEnergy(double *r, double *W, double L, int N)  
+double wallsEnergy(const double *r, double *W, double L, int N)  
 {
     double V = 0.0;
     double dz2;
     for (int n=0; n<N; n++)  {
             dz2 = r[3*n+2] * r[3*n+2];
-            V += 4 * (W[1] / pow(pow(dz2,3.),2.) - W[2] / (dz2*dz2*dz2));
+            V += W[1] / pow(pow(dz2,3.),2.) - W[2] / (dz2*dz2*dz2);
     }
-    return V;
+    return V*4;
 }
 
 
 
-double pressure(double *r, double L, int N)  
+double pressure(const double *r, double L, int N)  
 {
     double P = 0.0;
     double dx, dy, dz, dr2;
@@ -384,13 +395,13 @@ double pressure(double *r, double L, int N)
 }
 
 
-void shiftSystem(double *r, double L, int N)  // da ricontrollare
+inline void shiftSystem(double *r, double L, int N)  // da ricontrollare
 {
     for (int j=0; j<3*N; j++)
         r[j] = r[j] - L*rint(r[j]/L);
 }
 
-void shiftSystem2D(double *r, double L, int N)  // da ricontrollare
+inline void shiftSystem2D(double *r, double L, int N)  // da ricontrollare
 {
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);
@@ -399,7 +410,7 @@ void shiftSystem2D(double *r, double L, int N)  // da ricontrollare
 }
 
 
-void vecBoxMuller(double sigma, size_t length, double * A)  // confrontare con dSFMT
+inline void vecBoxMuller(double sigma, size_t length, double * A)  // confrontare con dSFMT
 {
     double x1, x2;
 
@@ -411,7 +422,7 @@ void vecBoxMuller(double sigma, size_t length, double * A)  // confrontare con d
     }
 }
 
-void fft_acf(double *H, int k_max, size_t length, double * acf)   
+void fft_acf(const double *H, int k_max, size_t length, double * acf)   
 {
     fftw_plan p;
     int lfft = length/2+1;
@@ -442,11 +453,19 @@ void fft_acf(double *H, int k_max, size_t length, double * acf)
 }
 
 
+inline void zeros(size_t length, double *A)
+{
+    for (int i=length; i!=0; i--)
+        A[i] = 0.0;
+}
+
+
+
 /*
     Mathematics rubbish
 */
 
-double sum(double * A, size_t length)   {
+inline double sum(const double * A, size_t length)   {
     double s = 0.;
     for (int i=0; i<length; i++)
         s += A[i];
@@ -454,7 +473,7 @@ double sum(double * A, size_t length)   {
     return s;
 }
 
-double dot(double * A, double * B, size_t length)  {
+inline double dot(const double * A, double * B, size_t length)  {
     double result = 0.0;
 
     for (int i=0; i<length; i++)
@@ -463,24 +482,42 @@ double dot(double * A, double * B, size_t length)  {
     return result;
 }
 
-void elforel(double * A, double * B, double * C, size_t length)  {
+inline void elforel(const double * A, const double * B, double * C, size_t length)  {
     for (int i=0; i<length; i++)
         C[i] = A[i]*B[i];
 }
 
-double mean(double * A, size_t length) {
+inline double mean(const double * A, size_t length) {
     return sum(A,length)/length;
 }
 
-double media(double * A, size_t length) {
+double media(const double * A, size_t length) {
     double birra = 0.4;
     return birra;
 }
 
-double variance(double * A, size_t length)  {
+inline double variance(const double * A, size_t length)  {
     double * A2 = malloc(length * sizeof(double));
     elforel(A,A,A2,length);
     double var = mean(A2,length) - mean(A,length)*mean(A,length);
     free(A2);
     return var;
 }
+
+
+/* TODO
+ * 
+ * 
+ * 
+ * Prestazioni: 
+ *
+ * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
+ * confrontare prestazioni con array in stack
+ * provare loop-jamming
+ * provare loop al contrario  (probabilmente inutile - compilatore)
+ * provare uint_fast8_t (probabilmente inutile)
+ * provare N come #define
+ * aliases per funzioni dentro funzioni con array in lettura
+ * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
+ * 
+ */
