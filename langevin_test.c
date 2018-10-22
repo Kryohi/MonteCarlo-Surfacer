@@ -13,6 +13,10 @@
 
 // number of slices for the potential of the walls
 #define M 42
+// number of particles:
+//#define N 32
+// frequency of acquisition and storage of thermodinamic variables
+#define MEASUREMENT_PERIOD 100
 
 
 struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps);
@@ -25,6 +29,7 @@ void forces(const double *r, double L, int N, double *F);
 void wallsForces(const double *r, const double *W, double L, int N, double *F);
 double energy(const double *r, double L, int N);
 double pressure(const double *r, double L, int N);
+void zeros(size_t length, double *A);
 double mean(const double *A, size_t length);
 void elforel(const double *A, const double * B, double * C, size_t length);
 
@@ -507,17 +512,19 @@ inline double variance(const double * A, size_t length)  {
 
 /* TODO
  * 
- * 
+ * mettere funzioni in file.h esterno
  * 
  * Prestazioni: 
  *
+ * provare N come #define
+ * FX, FY, WX, WY preallocati?
  * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
  * confrontare prestazioni con array in stack
  * provare loop-jamming
  * provare loop al contrario  (probabilmente inutile - compilatore)
  * provare uint_fast8_t (probabilmente inutile)
- * provare N come #define
  * aliases per funzioni dentro funzioni con array in lettura
  * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
+ * provare c++ con vectorizer di Agner
  * 
  */
