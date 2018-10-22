@@ -12,9 +12,9 @@
 
 
 // number of slices for the potential of the walls
-#define M 42
+#define M 20
 // number of particles:
-//#define N 32
+#define N 32
 // frequency of acquisition and storage of thermodinamic variables
 #define MEASUREMENT_PERIOD 100
 
@@ -43,7 +43,6 @@ struct Sim {    // struct containing all the useful results of one simulation
 int main(int argc, char** argv)
 {
     int maxsteps = 10;
-    int N = 32;
     double rho = 0.1;
     double T = 0.3;
     double L = cbrt(N/rho);
@@ -114,7 +113,7 @@ struct Sim sMC(double rho, double T, const double *W, int maxsteps)
         E[n] = energy(X, L);
         P[n] = pressure(X, L);
         
-        markovProbability(X, Y, L, N, T, s, d, ap);
+        markovProbability(X, Y, L, T, s, d, ap);
         
         for (int i=0; i<3*N; i++)   {
             eta = rand();
@@ -231,7 +230,7 @@ void initializeBox(double L, int N_, double *X)
 
 
 // TODO
-void initializeCavity(double L, int N, double *X) // da rendere rettangolare?
+void initializeCavity(double L, int N_, double *X) // da rendere rettangolare?
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
