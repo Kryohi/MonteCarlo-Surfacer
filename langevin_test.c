@@ -19,16 +19,16 @@
 #define MEASUREMENT_PERIOD 100
 
 
-struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps);
+struct Sim sMC(double rho, double T, const double *W, int maxsteps);
 void vecBoxMuller(double sigma, size_t length, double *A);
-void shiftSystem(double *r, double L, int N);
+void shiftSystem(double *r, double L);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
-void initializeBox(double L, int N, double *X);
-void markovProbability(const double *X, double *Y, double L, int N, double T, double s, double d, double *ap);
-void forces(const double *r, double L, int N, double *F);
-void wallsForces(const double *r, const double *W, double L, int N, double *F);
-double energy(const double *r, double L, int N);
-double pressure(const double *r, double L, int N);
+void initializeBox(double L, int n, double *X);
+void markovProbability(const double *X, double *Y, double L, double T, double s, double d, double *ap);
+void forces(const double *r, double L, double *F);
+void wallsForces(const double *r, const double *W, double L, double *F);
+double energy(const double *r, double L);
+double pressure(const double *r, double L);
 void zeros(size_t length, double *A);
 double mean(const double *A, size_t length);
 void elforel(const double *A, const double * B, double * C, size_t length);
@@ -61,7 +61,7 @@ int main(int argc, char** argv)
 
     struct Sim MC1;
     
-    MC1 = sMC(N, rho, T, W, maxsteps);
+    MC1 = sMC(rho, T, W, maxsteps);
 
     printf("\n%lf\n", MC1.E);
     
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
 }
 
 
-struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps)   
+struct Sim sMC(double rho, double T, const double *W, int maxsteps)   
 {
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
@@ -111,8 +111,8 @@ struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps)
 
     for (int n=0; n<maxsteps; n++)
     {
-        E[n] = energy(X, L, N);
-        P[n] = pressure(X, L, N);
+        E[n] = energy(X, L);
+        P[n] = pressure(X, L);
         
         markovProbability(X, Y, L, N, T, s, d, ap);
         
@@ -158,7 +158,7 @@ struct Sim sMC(int N, double rho, double T, const double *W, int maxsteps)
 }
 
 
-void markovProbability(const double *X, double *Y, double L, int N, double T, double s, double d, double *ap)  
+void markovProbability(const double *X, double *Y, double L, double T, double s, double d, double *ap)  
 {
     double * gauss = malloc(3*N * sizeof(double));
     double * FX = malloc(3*N * sizeof(double));
@@ -170,7 +170,7 @@ void markovProbability(const double *X, double *Y, double L, int N, double T, do
     double * WY = malloc(3*N * sizeof(double));
     
     vecBoxMuller(s, 3*N, gauss);
-    forces(X, L, N, FX);
+    forces(X, L, FX);
     
     // Proposal
     for (int i=0; i<3*N; i++)
@@ -179,8 +179,8 @@ void markovProbability(const double *X, double *Y, double L, int N, double T, do
         displacement[i] = Y[i] - X[i];   // usare shiftSystem() anche su questo?
     }
     
-    shiftSystem(Y, L, N);
-    forces(Y, L, N, FY);
+    shiftSystem(Y, L);
+    forces(Y, L, FY);
     
     // Acceptance probability calculation
     for (int i=0; i<3*N; i++)     // DA SISTEMARE
@@ -192,11 +192,11 @@ void markovProbability(const double *X, double *Y, double L, int N, double T, do
     }
 }
 
-void initializeBox(double L, int N, double *X) 
+void initializeBox(double L, int N_, double *X) 
 {
-    int Na = (int)(cbrt(N/4)); // number of cells per dimension
+    int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N/4))
+    if (Na != cbrt(N_/4))
         perror("Can't make a cubic FCC crystal with this N :(");
 
 
@@ -226,16 +226,16 @@ void initializeBox(double L, int N, double *X)
     for (int n=0; n<3*N; n++)
         X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
 
-    shiftSystem(X,L,N);
+    shiftSystem(X,L);
 }
 
 
 // TODO
 void initializeCavity(double L, int N, double *X) // da rendere rettangolare?
-{ 
-    int Na = (int)(cbrt(N/4)); // number of cells per dimension
+{
+    int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N/4))
+    if (Na != cbrt(N_/4))
         perror("Can't make a cubic FCC crystal with this N :(");
 
 
@@ -265,9 +265,9 @@ void initializeCavity(double L, int N, double *X) // da rendere rettangolare?
     for (int n=0; n<3*N; n++)
         X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
 
-
-    shiftSystem(X,L,N);
+    shiftSystem(X,L);
 }
+
 
 /*
  Takes average and standard deviation of the distance from the y-axis and of the maximum binding energy
@@ -292,7 +292,7 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
 }
 
 
-void forces(const double *r, double L, int N, double *F) 
+void forces(const double *r, double L, double *F) 
 {
     double dx, dy, dz, dr2, dV;
 
@@ -329,7 +329,7 @@ void forces(const double *r, double L, int N, double *F)
 // TODO
 // sentire forza da tutti i segmenti? Solo quelli più vicini?
 
-void wallsForces(const double *r, const double *W, double L, int N, double *F) 
+void wallsForces(const double *r, const double *W, double L, double *F) 
 { 
     double dx, dy, dz, dr2, dV;
      
@@ -346,7 +346,7 @@ void wallsForces(const double *r, const double *W, double L, int N, double *F)
 
 
 
-double energy(const double *r, double L, int N)  
+double energy(const double *r, double L)  
 {
     double V = 0.0;
     double dx, dy, dz, dr2;
@@ -366,7 +366,7 @@ double energy(const double *r, double L, int N)
     return V*4;
 }
 
-double wallsEnergy(const double *r, double *W, double L, int N)  
+double wallsEnergy(const double *r, double *W, double L)  
 {
     double V = 0.0;
     double dz2;
@@ -379,7 +379,7 @@ double wallsEnergy(const double *r, double *W, double L, int N)
 
 
 
-double pressure(const double *r, double L, int N)  
+double pressure(const double *r, double L)  
 {
     double P = 0.0;
     double dx, dy, dz, dr2;
@@ -400,13 +400,13 @@ double pressure(const double *r, double L, int N)
 }
 
 
-inline void shiftSystem(double *r, double L, int N)  // da ricontrollare
+inline void shiftSystem(double *r, double L)  // da ricontrollare
 {
     for (int j=0; j<3*N; j++)
         r[j] = r[j] - L*rint(r[j]/L);
 }
 
-inline void shiftSystem2D(double *r, double L, int N)  // da ricontrollare
+inline void shiftSystem2D(double *r, double L)  // da ricontrollare
 {
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);
