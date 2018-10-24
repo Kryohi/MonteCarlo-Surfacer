@@ -30,6 +30,7 @@ void wallsForces(const double *r, const double *W, double L, double *F);
 double energy(const double *r, double L);
 double pressure(const double *r, double L);
 void zeros(size_t length, double *A);
+double sum(const double *A, size_t length);
 double mean(const double *A, size_t length);
 void elforel(const double *A, const double * B, double * C, size_t length);
 
@@ -48,7 +49,7 @@ int main(int argc, char** argv)
     double L = cbrt(N/rho);
     
     // contains the parameters c and d for every piece of the wall
-    double * W = malloc(2*M * sizeof(double));
+    double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = 1.0;
@@ -57,7 +58,8 @@ int main(int argc, char** argv)
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
-
+    
+    // declaration of the results of the simulations
     struct Sim MC1;
     
     MC1 = sMC(rho, T, W, maxsteps);
@@ -76,13 +78,13 @@ struct Sim sMC(double rho, double T, const double *W, int maxsteps)
     
     double sim_time, eta;
     // contains the initial particle positions
-    double * X = malloc(3*N * sizeof(double));
+    double * X = calloc(3*N, sizeof(double));
     // contains the proposed particle positions
-    double * Y = malloc(3*N * sizeof(double));
-    double * ap = malloc(3*N * sizeof(double)); // oppure lungo solo N?
-    double * E = malloc(maxsteps * sizeof(double));
-    double * P = malloc(maxsteps * sizeof(double));
-    double * jj = malloc(maxsteps * sizeof(double));
+    double * Y = calloc(3*N, sizeof(double));
+    double * ap = calloc(3*N, sizeof(double)); // oppure lungo solo N?
+    double * E = calloc(maxsteps, sizeof(double));
+    double * P = calloc(maxsteps, sizeof(double));
+    double * jj = calloc(maxsteps, sizeof(double));
 
     FILE *positions = fopen("positions.csv", "w");
     for (int n=0; n<N; n++)
@@ -91,7 +93,7 @@ struct Sim sMC(double rho, double T, const double *W, int maxsteps)
     
     
     // System initialization
-    double d = 2e-3;
+    double D = 2e-3;
     double g = 0.065;
     double L = cbrt(N/rho);
     double a = L/(int)(cbrt(N/4));
@@ -113,7 +115,7 @@ struct Sim sMC(double rho, double T, const double *W, int maxsteps)
         E[n] = energy(X, L);
         P[n] = pressure(X, L);
         
-        markovProbability(X, Y, L, T, s, d, ap);
+        markovProbability(X, Y, L, T, s, D, ap);
         
         for (int i=0; i<3*N; i++)   {
             eta = rand();
@@ -157,13 +159,11 @@ struct Sim sMC(double rho, double T, const double *W, int maxsteps)
 }
 
 
-void markovProbability(const double *X, double *Y, double L, double T, double s, double d, double *ap)  
+void markovProbability(const double *X, double *Y, double L, double T, double s, double D, double *ap)  
 {
     double * gauss = malloc(3*N * sizeof(double));
-    double * FX = malloc(3*N * sizeof(double));
-    double * FY = malloc(3*N * sizeof(double));
-    zeros(N*3, FX); // puts FX array to all zeros
-    zeros(N*3, FY); // puts FY array to all zeros
+    double * FX = calloc(3*N, sizeof(double));
+    double * FY = calloc(3*N, sizeof(double));
     double * displacement = malloc(3*N * sizeof(double));
     double * WX = malloc(3*N * sizeof(double));
     double * WY = malloc(3*N * sizeof(double));
@@ -174,21 +174,24 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
     // Proposal
     for (int i=0; i<3*N; i++)
     {
-        Y[i] = X[i] + d*FX[i] + gauss[i]*s;     // force da dividere per γ?
+        Y[i] = X[i] + D*FX[i] + gauss[i]*s;     // force da dividere per γ?
         displacement[i] = Y[i] - X[i];   // usare shiftSystem() anche su questo?
     }
     
     shiftSystem(Y, L);
     forces(Y, L, FY);
+    double Uxy = energy(X,L) - energy(Y,L);
     
     // Acceptance probability calculation
     for (int i=0; i<3*N; i++)     // DA SISTEMARE
     {
-        WX[i] = (displacement[i] - FX[i]*d) * (displacement[i] - FX[i]*d);  // controllare segni
-        WY[i] = (- displacement[i] - FY[i]*d) * (- displacement[i] - FY[i]*d);
+        WX[i] = (displacement[i] - FX[i]*D) * (displacement[i] - FX[i]*D);  // controllare segni
+        WY[i] = (- displacement[i] - FY[i]*D) * (- displacement[i] - FY[i]*D);
         
-        ap[i] = exp((energies(X,L) - energies(Y,L))/T + (WX[i]-WY[i])/(4*d*T));
+        ap[i] = exp(Uxy/T + (WX[i]-WY[i])/(4*D*T));
     }
+    
+    free(gauss); free(FX); free(FY); free(displacement); free(WX); free(WY); 
 }
 
 void initializeBox(double L, int N_, double *X) 
@@ -344,6 +347,10 @@ void wallsForces(const double *r, const double *W, double L, double *F)
 }
 
 
+/*
+ * Calculate the interparticle potential energy of the system
+ * 
+*/
 
 double energy(const double *r, double L)  
 {
@@ -364,6 +371,11 @@ double energy(const double *r, double L)
     }
     return V*4;
 }
+
+/*
+ * Calculate the potential energy between the particles and the wall
+ * 
+*/
 
 double wallsEnergy(const double *r, double *W, double L)  
 {
@@ -414,7 +426,12 @@ inline void shiftSystem2D(double *r, double L)  // da ricontrollare
 }
 
 
-inline void vecBoxMuller(double sigma, size_t length, double * A)  // confrontare con dSFMT
+/*
+ * Put in the array A gaussian-distributed numbers around 0, with standard deviation sigma
+ * // confrontare con dSFMT
+*/
+
+inline void vecBoxMuller(double sigma, size_t length, double * A)
 {
     double x1, x2;
 
@@ -425,6 +442,12 @@ inline void vecBoxMuller(double sigma, size_t length, double * A)  // confrontar
         A[2*i+1] = sqrt(-2*sigma*log(1-x2))*sin(2*M_PI*x1);
     }
 }
+
+
+/*
+ * Calculate the autocorrelation function
+ * 
+*/
 
 void fft_acf(const double *H, int k_max, size_t length, double * acf)   
 {
@@ -457,11 +480,6 @@ void fft_acf(const double *H, int k_max, size_t length, double * acf)
 }
 
 
-inline void zeros(size_t length, double *A)
-{
-    for (int i=length; i!=0; i--)
-        A[i] = 0.0;
-}
 
 
 
@@ -500,6 +518,12 @@ double media(const double * A, size_t length) {
     return birra;
 }
 
+inline void zeros(size_t length, double *A)
+{
+    for (int i=length; i!=0; i--)
+        A[i] = 0.0;
+}
+
 inline double variance(const double * A, size_t length)  {
     double * A2 = malloc(length * sizeof(double));
     elforel(A,A,A2,length);
@@ -517,6 +541,7 @@ inline double variance(const double * A, size_t length)  {
  *
  * provare N come #define
  * FX, FY, WX, WY preallocati?
+ * dSMT al post di rand()
  * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
  * confrontare prestazioni con array in stack
  * provare loop-jamming
