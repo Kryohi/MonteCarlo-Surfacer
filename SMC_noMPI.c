@@ -7,6 +7,7 @@
  * cambiare ordine di molecola da spostare ad ogni ciclo?
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
+ * salvare i vari file csv in ./Data/
  * 
  * Prestazioni: 
  *
@@ -99,15 +100,15 @@ struct Sim {    // struct containing all the useful results of one simulation
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 10000000;
-    int gather_lapse = 10;
+    int maxsteps = 5000000;
+    int gather_lapse = 20;
     int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
     
    
-    /* Initialize Particle Positions */
+    /* Initialize particle positions */
     
     double * R0 = calloc(3*N, sizeof(double));
     char filename[36]; 
@@ -162,6 +163,8 @@ int main(int argc, char** argv)
     
     MC1 = sMC(rho, T, W, R0, maxsteps, gather_lapse, eqsteps);
     
+    
+    printf("\n###  Final results  ###");
     printf("\nMean energy: %f ± %f", MC1.E, MC1.dE);
     printf("\nMean pressure: %f ± %f", MC1.P, MC1.dP);
     printf("\nApproximate heat capacity: %f", MC1.cv);
@@ -188,13 +191,13 @@ int main(int argc, char** argv)
 
 struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
 {
-    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %f, for %d steps...\n", N, T, rho, 5e-8, maxsteps);
+    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-6, for %d steps...\n", N, T, rho, 5e-8*1e6, maxsteps);
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
     
     double sim_time;
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 80000;
+    int kmax = 50000;
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
     double *R = malloc(3*N * sizeof(double));
@@ -209,7 +212,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // Initialize csv files
     char filename[32]; 
-    snprintf(filename, 32, "positions_n%d_r%0.2f_T%0.2f.csv", N, rho, T);
+    snprintf(filename, 32, "positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -218,7 +221,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 32, "data_n%d_r%0.2f_T%0.2f.csv", N, rho, T);
+    snprintf(filename, 32, "data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
@@ -250,14 +253,14 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
             E[k] = energy(R, L);
-            E[k] += wallsEnergy(R, W, L);
+            //E[k] += wallsEnergy(R, W, L);
             P[k] = pressure(R, L);
             
-            /*printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
+            //printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
             for (int i=0; i<3*N; i++)
                 fprintf(positions, "%0.12lf,", R[i]);
 
-            fprintf(positions, "\n");*/
+            fprintf(positions, "\n");
             // aggiungere indicatore di progresso ? [fflush(stdout);]
         }
         
@@ -324,9 +327,9 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     for (int n=0; n<N; n++)
     {
         Um = energySingle(R, L, n);
-        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         force(R, L, n, &Fmx, &Fmy, &Fmz);
-        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
+        //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
         deltaX = Fmx*(A/T) + displ[3*n];
         deltaY = Fmy*(A/T) + displ[3*n+1];
@@ -338,12 +341,12 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         Un = energySingle(Rn, L, n);
         //printf("Un = %f\t", Un);
-        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
+        //Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
         //printf("%f\n", Un);
         //printf("Fnx = %f\t", Fnx);
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
         //printf("%f\t", Fnx);
-        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
+        //wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // probably useless here
@@ -610,7 +613,7 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         if (dr2 < L*L/4)
         {
             dr8 = dr2*dr2*dr2*dr2;
-            dV = 24.0 * W[2*m] / dr8 - 48.0 * W[2*m+1] /(dr8*dr2*dr2*dr2);
+            dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] /(dr8*dr2*dr2*dr2);
             *Fx -= dV*dx;
             *Fy -= dV*dy;
             *Fz -= dV*dz;
