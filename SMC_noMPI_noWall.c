@@ -1,28 +1,3 @@
-
-/* TODO
- * 
- * Unire calcolo energia e forze interparticellari e con parete?
- * Aggiungere contributo parete a pressione
- * mettere funzioni in file.h esterno
- * cambiare ordine di molecola da spostare ad ogni ciclo?
- * deltaX gaussiano sferico o in ogni direzione?
- * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
- * 
- * Prestazioni: 
- *
- * dSMT al post di rand() ? 
- * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
- * confrontare prestazioni con array in stack
- * provare loop-jamming
- * provare loop al contrario  (probabilmente inutile - compilatore)
- * provare uint_fast8_t (probabilmente inutile)
- * aliases per funzioni dentro funzioni con array in lettura
- * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
- * provare c++ con vectorizer di Agner
- * 
- */
-
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -55,7 +30,7 @@ void shiftSystem(double * r, double L);
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W);
 void initializeBox(double L, int n, double * X);
 void markovProbability(const double * R, double * Rn, double L, double T, double s, double d, double *ap);
-void oneParticleMoves(double * R, double * Rn, const double * W, double L, double A, double T, int * j);
+void oneParticleMoves(double * R, double * Rn, double L, double A, double T, int * j);
 void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz);
 void forces(const double *r, double L, double *F);
 //void wallsForces(const double *r, const double *W, double L, double *F);
@@ -99,7 +74,7 @@ struct Sim {    // struct containing all the useful results of one simulation
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 10000000;
+    int maxsteps = 1000000;
     int gather_lapse = 10;
     int eqsteps = 10000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
@@ -176,7 +151,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     double sim_time;
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 80000;
+    int kmax = 42000;
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
     double *R = malloc(3*N * sizeof(double));
@@ -230,7 +205,6 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
             E[k] = energy(R, L);
-            E[k] += wallsEnergy(R, W, L);
             P[k] = pressure(R, L);
             
             /*printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
@@ -241,7 +215,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             // aggiungere indicatore di progresso ? [fflush(stdout);]
         }
         
-        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+        oneParticleMoves(R, Rn, L, A, T, &jj[n]);
     }
     
     end = clock();
@@ -289,7 +263,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
  * 
 */
 
-void oneParticleMoves(double * R, double * Rn, const double * W, double L, double A, double T, int * j)
+void oneParticleMoves(double * R, double * Rn, double L, double A, double T, int * j)
 {
     double * displ = malloc(3*N * sizeof(double));
     double Um, Un, deltaX, deltaY, deltaZ, Fmx, Fmy, Fmz, Fnx, Fny, Fnz, deltaW, ap;
@@ -304,9 +278,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     for (int n=0; n<N; n++)
     {
         Um = energySingle(R, L, n);
-        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         force(R, L, n, &Fmx, &Fmy, &Fmz);
-        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
         deltaX = Fmx*(A/T) + displ[3*n];
         deltaY = Fmy*(A/T) + displ[3*n+1];
@@ -317,14 +289,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         Rn[3*n+2] = R[3*n+2] + deltaZ;
 
         Un = energySingle(Rn, L, n);
-        printf("Un = %f\t", Un);
-        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
-        printf("%f\n", Un);
-        printf("Fnx = %f\t", Fnx);
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        printf("%f\t", Fnx);
-        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
-        printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // probably useless here
 
@@ -570,6 +535,7 @@ void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz)
  * Be careful, it doesn't initialize F to zero, it only adds.
  * 
 */
+// TODO
 // sentire forza da tutti i segmenti? Solo quelli più vicini?
 
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double *Fx, double *Fy, double *Fz) 
@@ -633,7 +599,7 @@ double energy(const double *r, double L)
 double energySingle(const double *r, double L, int i)
 {
     double V = 0.0;
-    double dx, dy, dz, dr2;
+    double dx, dy, dz, dr2, dr6;
     for (int l=1; l<N; l++)  {
         if (l != i)   {
             dx = r[3*l] - r[3*i];
@@ -643,8 +609,10 @@ double energySingle(const double *r, double L, int i)
             dz = r[3*l+2] - r[3*i+2];
             dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
-                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
+            if (dr2 < L*L/4)    {
+                dr6 = dr2*dr2*dr2;
+                V += 1.0/(dr6*dr6) - 1.0/dr6;
+            }
         }
     }
     return V*4;
@@ -654,42 +622,19 @@ double energySingle(const double *r, double L, int i)
  * Calculate the potential energy between the particles and the wall
  * 
 */
-
+/*
 double wallsEnergy(const double *r, const double *W, double L)  
 {
     double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    double dw = L/M;
-    
-    for (int m=0; m<M; m++)  
-    {
-        for (int i=1; i<N; i++)  
-        {
-            //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-            dx = r[3*i] - m*dw;
-            dx = dx - L*rint(dx/L);
-            dy = r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + L/2;
-            dr2 = dx*dx + dz*dz;
-        
-            if (dr2 < L*L/4)    // da togliere?
-            {
-                dr6 = dr2*dr2*dr2;
-                V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
-            }
-        }
+    double dz2;
+    for (int n=0; n<N; n++)  {
+            dz2 = r[3*n+2] * r[3*n+2];
+            V += W[1] / pow(pow(dz2,3.),2.) - W[2] / (dz2*dz2*dz2);
     }
     return V*4;
-}
+}*/
 
-
-/*
- * Calculate the potential energy between one particle and the wall
- * 
-*/
-
-double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L)
+double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L)  
 {
     double V = 0.0;
     double dx, dy, dz, dr2, dr6;
@@ -703,7 +648,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
         dy = ry;
         dy = dy - L*rint(dy/L);
         dz = rz + L/2;
-        dr2 = dx*dx + dz*dz;
+        dr2 = dx*dx + dz*dz; 
         
         if (dr2 < L*L/4)
         {
@@ -922,4 +867,30 @@ inline double variance2(const double * A, int buco, size_t length)
 }
 
 
+/*
+    Other rubbish
+*/
+
+
+/* TODO
+ * 
+ * mettere funzioni in file.h esterno
+ * cambiare ordine di molecola da spostare ad ogni ciclo?
+ * deltaX gaussiano sferico o in ogni direzione?
+ * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
+ * 
+ * Prestazioni: 
+ *
+ * FX, FY, WX, WY preallocati?
+ * dSMT al post di rand()
+ * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
+ * confrontare prestazioni con array in stack
+ * provare loop-jamming
+ * provare loop al contrario  (probabilmente inutile - compilatore)
+ * provare uint_fast8_t (probabilmente inutile)
+ * aliases per funzioni dentro funzioni con array in lettura
+ * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
+ * provare c++ con vectorizer di Agner
+ * 
+ */
 

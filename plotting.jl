@@ -1,19 +1,26 @@
 using Statistics, CSVFiles, DataFrames, Plots
-gr()
+pyplot()
 
 run(`gcc -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 run(`./smc`)
 
-dfp = DataFrame(load("positions_n32_r0.24_T0.40.csv"))
+dfp = DataFrame(load("positions_n32_r0.10_T0.40.csv"))
 N = Int((size(dfp,2)-1)/3)
 
 X0 = [dfp[1, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
 make3Dplot(X0)
 
-dfd = DataFrame(load("data_n32_r0.24_T0.40.csv"))
-plot(dfd.E[10:10:end])
+dfd = DataFrame(load("data_n32_r0.10_T0.40.csv"))
+plot(dfd.E[10:50:end])
 gui()
+acfsimple = MCs.acf(dfd.E, 80000)
+acf = MCs.fft_acf(dfd.E, 80000)
+tausimple = sum(acfsimple)*10
+tau = sum(acf)*10
+
+
+
 
 function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0)
     Plots.default(size=(800,600))
@@ -47,4 +54,38 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
     file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
     save && savefig(file)
     gui()
+end
+
+
+
+function acf(H::Array{Float64,1}, k_max::Int64)
+
+    C_H = zeros(k_max)
+    Z = H .- mean(H)
+
+    if k_max>20000
+        bar = Progress(k_max, dt=1.0, desc="Calculating acf...", barglyphs=BarGlyphs("[=> ]"), barlen=45)
+    end
+
+    @fastmath for k = 1:k_max
+        C_H_temp = 0.0
+        for i = 1:length(H)-k_max-1
+            @inbounds C_H_temp += Z[i] * Z[i+k-1]
+        end
+        C_H[k] = C_H_temp
+        (k_max>20000) && next!(bar)
+    end
+    CH1 = C_H[1]/(length(H))    # togliere o non togliere k_max, questo è il dilemma
+
+    return C_H ./ (CH1*length(H))    # unbiased and normalized autocorrelation function
+end
+
+function fft_acf(H::Array{Float64,1}, k_max::Int)
+
+    Z = H .- mean(H)
+    fvi = rfft(Z)
+    acf = ifft(fvi .* conj.(fvi))
+    acf = real.(acf)
+
+    return acf[1:k_max]./acf[1]
 end
