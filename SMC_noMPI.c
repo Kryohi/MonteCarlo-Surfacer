@@ -38,7 +38,7 @@
 
 
 // number of slices for the potential of the walls
-#define M 20
+#define M 40
 // number of particles:
 #define N 32
 
@@ -101,7 +101,7 @@ int main(int argc, char** argv)
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 10000000;
     int gather_lapse = 10;
-    int eqsteps = 10000;    // number of steps for the equilibrium pre-simulation
+    int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
@@ -111,7 +111,7 @@ int main(int argc, char** argv)
     
     double * R0 = calloc(3*N, sizeof(double));
     char filename[32]; 
-    snprintf(filename, 32, "last_state_n%d_r%0.2f_T%0.2f.csv", N, rho, T);
+    snprintf(filename, 32, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
     {
@@ -141,6 +141,17 @@ int main(int argc, char** argv)
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
+    
+    // save the wall potentials to a csv file 
+    char filename[32];
+    snprintf(filename, 32, "wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    FILE * wall;
+    wall = fopen(filename, "w");
+    fprintf(wall, "c,d\n");
+    for (int m=0; m<M; i++)
+        fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
+        
+    fclose(wall);
     
     
     /* Prepare the results and start the simulations */
@@ -187,7 +198,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
-    double * acf2 = calloc(kmax, sizeof(double));
+    double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
     // Initialize csv files
     char filename[32]; 
@@ -220,7 +231,9 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     // Thermalization
 
-
+    for (int n=0; n<eqsteps; n++)
+        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+    
     
     // Actual simulation
     start = clock();
@@ -317,14 +330,14 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         Rn[3*n+2] = R[3*n+2] + deltaZ;
 
         Un = energySingle(Rn, L, n);
-        printf("Un = %f\t", Un);
+        //printf("Un = %f\t", Un);
         Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
-        printf("%f\n", Un);
-        printf("Fnx = %f\t", Fnx);
+        //printf("%f\n", Un);
+        //printf("Fnx = %f\t", Fnx);
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        printf("%f\t", Fnx);
+        //printf("%f\t", Fnx);
         wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
-        printf("%f\n", Fnx);
+        //printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // probably useless here
 

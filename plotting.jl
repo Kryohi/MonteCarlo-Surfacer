@@ -12,7 +12,7 @@ X0 = [dfp[1, col] for col in 1:3N] # subset of columns
 make3Dplot(X0)
 
 dfd = DataFrame(load("data_n32_r0.10_T0.40.csv"))
-plot(dfd.E[10:50:end])
+plot(dfd.E[1:50:end])
 gui()
 acfsimple = MCs.acf(dfd.E, 80000)
 acf = MCs.fft_acf(dfd.E, 80000)
