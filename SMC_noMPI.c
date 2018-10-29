@@ -8,6 +8,7 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
  * salvare i vari file csv in ./Data/
+ * energia totale come 1/2 somma delle energie singole
  * 
  * Prestazioni: 
  *
@@ -30,8 +31,8 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 12000000;
-    int gather_lapse = 100;
+    int maxsteps = 4000000;
+    int gather_lapse = 20;
     int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
@@ -83,8 +84,7 @@ int main(int argc, char** argv)
     fprintf(wall, "c,d\n");
     for (int m=0; m<M; m++)
         fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
-        
-    fclose(wall);
+    
     
     
     /* Prepare the results and start the simulations */
@@ -102,6 +102,8 @@ int main(int argc, char** argv)
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
+   // for (int m=0; m<MC1.ACF.length; m++)
+    //    printf("%f\n", MC1.ACF.data[m]);
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
@@ -112,8 +114,8 @@ int main(int argc, char** argv)
     for (int i=0; i<3*N; i++)
         fprintf(last_state, "%0.12f,", MC1.Rfinal[i]);
     
-    fclose(last_state);
-    free(W);
+    fclose(last_state); fclose(wall);
+    free(R0); free(W);
     
     return 0;
 }
@@ -121,13 +123,24 @@ int main(int argc, char** argv)
 
 struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
 {
-    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-3, for %d steps...\n", N, T, rho, 5e-5*1e3, maxsteps);
-    srand(time(NULL));  // metterne uno per processo MPI
-    clock_t start, end;
+    // System properties
+    double L = cbrt(N/rho);
+    //double D = 2e-3;
+    //double g = 0.065;
+    //double A = g*T;
+    //double s = sqrt(4*A*D)/g;
+    double A = 4.0e-5;
     
-    double sim_time;
+    // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 50000;
+    
+    clock_t start, end;
+    double sim_time;
+    srand(time(NULL));  // metterne uno per processo MPI
+    
+    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
     double *R = malloc(3*N * sizeof(double));
@@ -159,23 +172,14 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     fprintf(data, "E, P, jj\n");
     
     
-    // System properties
-    double L = cbrt(N/rho);
-    //double D = 2e-3;
-    //double g = 0.065;
-    //double A = g*T;
-    //double s = sqrt(4*A*D)/g;
-    double A = 4.5e-5;
-    
-    
-    
-    // Thermalization
+    /*  Thermalization   */
 
-    for (int n=0; n<eqsteps; n++)
-        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+   // for (int n=0; n<eqsteps; n++)
+     //   oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     
     
-    // Actual simulation
+    /*  Actual simulation   */
+    
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
@@ -200,9 +204,12 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     printf("\nTime: %f s\n", sim_time);
 
+    
+    /*  Data preparation and storage  */
+    
     // autocorrelation calculation
-    fft_acf(E, gather_steps, kmax, acf);
-    simple_acf(E, gather_steps, kmax, acf2);
+    fft_acf(E, maxsteps, kmax, acf);
+    simple_acf(E, maxsteps, kmax, acf2);
     printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
 
     
@@ -213,21 +220,23 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // Create struct of the mean values and deviations to return
     struct Sim results;
-    results.E = mean(E, gather_steps) + 3*N*T/2;
-    results.dE = sqrt(variance(E, gather_steps));
+    results.E = mean(E, maxsteps) + 3*N*T/2;
+    printf("E: %f \n", mean(E, maxsteps) + 3*N*T/2);
+    results.dE = sqrt(variance(E, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = sum(acf, kmax);// * gather_lapse;
     results.cv = variance2(E, (int)rint(results.tau/2), gather_steps) / (T*T);
     
+    memcpy(results.Rfinal, R, 3*N * sizeof(double));
+    
     struct DoubleArray ACF;
     ACF.length = kmax;
     ACF.data = acf;
     results.ACF = ACF;
-    memcpy(results.Rfinal, R, 3*N * sizeof(double));
 
-    // frees the allocated memory
+    // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(ap); free(acf);
     int fclose(FILE *positions); int fclose(FILE *data);
 
@@ -251,18 +260,21 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     for (int i=0; i<3*N; i++)   // è necessario qua o si può usare solo una volta all'inizio?
         Rn[i] = R[i];
     
-    //startingParticle = rand()%N;
-    //for (int n = startingParticle; n != (startingParticle+N-1)%N; n = (n++)%N)
-    for (int n=0; n<N; n++)
+    // at each oneParicleMoves call, we start moving a different particle (offset % N)
+    int n; int offset = rand();
+    
+    for (int nn=0; nn<N; nn++)
     {
+        n = (nn+offset)%N;
+
         Um = energySingle(R, L, n);
         //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         force(R, L, n, &Fmx, &Fmy, &Fmz);
         //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
-        deltaX = Fmx*(A/T) + displ[3*n];
-        deltaY = Fmy*(A/T) + displ[3*n+1];
-        deltaZ = Fmz*(A/T) + displ[3*n+2];
+        deltaX = Fmx*A/T + displ[3*n];
+        deltaY = Fmy*A/T + displ[3*n+1];
+        deltaZ = Fmz*A/T + displ[3*n+2];
         
         Rn[3*n] = R[3*n] + deltaX;
         Rn[3*n+1] = R[3*n+1] + deltaY;
@@ -298,7 +310,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             Rn[3*n+2] = R[3*n+2];
         }
     }
-    
+
     free(displ);
 }
 
@@ -708,7 +720,7 @@ inline void shiftSystem2D(double *r, double L)  // da ricontrollare
 
 /*
  * Put in the array A gaussian-distributed numbers around 0, with standard deviation sigma
- * // confrontare con dSFMT
+ * 
 */
 
 inline void vecBoxMuller(double sigma, size_t length, double * A)

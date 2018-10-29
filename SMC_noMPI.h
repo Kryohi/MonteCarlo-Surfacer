@@ -28,12 +28,12 @@
 #define MEASUREMENT_PERIOD 100 */
 
 
-struct DoubleArray { 
+typedef struct DoubleArray { 
     size_t length;
     double *data;
-};
+} DoubleArray;
 
-struct Sim {    // struct containing all the useful results of one simulation
+typedef struct Sim {    // struct containing all the useful results of one simulation
     double E;
     double dE;
     double P;
@@ -43,7 +43,7 @@ struct Sim {    // struct containing all the useful results of one simulation
     double tau;
     double Rfinal[3*N];
     struct DoubleArray ACF;
-} sim;
+} Sim;
 
 
 
