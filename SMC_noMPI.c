@@ -30,14 +30,14 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 5000000;
-    int gather_lapse = 20;
+    int maxsteps = 12000000;
+    int gather_lapse = 100;
     int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
+
     
-   
     /* Initialize particle positions */
     
     double * R0 = calloc(3*N, sizeof(double));
@@ -121,7 +121,7 @@ int main(int argc, char** argv)
 
 struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
 {
-    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-6, for %d steps...\n", N, T, rho, 5e-8*1e6, maxsteps);
+    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-3, for %d steps...\n", N, T, rho, 5e-5*1e3, maxsteps);
     srand(time(NULL));  // metterne uno per processo MPI
     clock_t start, end;
     
@@ -134,7 +134,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     memcpy(R, R0, 3*N * sizeof(double));
     double * Rn = calloc(3*N, sizeof(double)); // contains the proposed particle positions
     double * ap = calloc(N, sizeof(double)); // solo per multi-particle moves, TODO
-    double * E = calloc(gather_steps, sizeof(double));
+    double * E = calloc(maxsteps, sizeof(double));
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
@@ -165,7 +165,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 4e-8;
+    double A = 4.5e-5;
     
     
     
@@ -182,7 +182,6 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     {
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
-            E[k] = energy(R, L);
             //E[k] += wallsEnergy(R, W, L);
             P[k] = pressure(R, L);
             
@@ -193,7 +192,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             fprintf(positions, "\n");
             // aggiungere indicatore di progresso ? [fflush(stdout);]
         }
-        
+        E[n] = energy(R, L);
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     }
     
@@ -204,12 +203,12 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     // autocorrelation calculation
     fft_acf(E, gather_steps, kmax, acf);
     simple_acf(E, gather_steps, kmax, acf2);
-    printf("TauSimple: %f \n", sum(acf2,kmax)*gather_lapse);
+    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
 
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9f,%0.9f,%0.4f\n", E[k], P[k], (float)(jj[k]/N));
+        fprintf(data, "%0.9f,%0.9f,%0.4f\n", E[k*gather_lapse], P[k], (float)(jj[k]/N));
     
 
     // Create struct of the mean values and deviations to return
@@ -219,7 +218,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
-    results.tau = sum(acf, kmax) * gather_lapse;
+    results.tau = sum(acf, kmax);// * gather_lapse;
     results.cv = variance2(E, (int)rint(results.tau/2), gather_steps) / (T*T);
     
     struct DoubleArray ACF;
@@ -719,8 +718,8 @@ inline void vecBoxMuller(double sigma, size_t length, double * A)
     for (int i=0; i<round(length/2); i++) {
         x1 = (double)rand() / (double)RAND_MAX;
         x2 = (double)rand() / (double)RAND_MAX;
-        A[2*i] = sqrt(-2*sigma*log(1-x1))*cos(2*M_PI*x2);
-        A[2*i+1] = sqrt(-2*sigma*log(1-x2))*sin(2*M_PI*x1);
+        A[2*i] = sigma * sqrt(-2*log(x1)) * cos(2*M_PI*x2);
+        A[2*i+1] = sigma * sqrt(-2*log(x2)) * sin(2*M_PI*x1);
     }
 }
 
