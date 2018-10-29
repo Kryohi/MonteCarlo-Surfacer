@@ -186,7 +186,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     {
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
-            //E[k] += wallsEnergy(R, W, L);
+            
             P[k] = pressure(R, L);
             
             //printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
@@ -196,7 +196,9 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             fprintf(positions, "\n");
             // aggiungere indicatore di progresso ? [fflush(stdout);]
         }
-        E[n] = energy(R, L);
+        
+        E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
+        //E[k] += wallsEnergy(R, W, L);
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     }
     
@@ -215,13 +217,12 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9f,%0.9f,%0.4f\n", E[k*gather_lapse], P[k], (float)(jj[k]/N));
+        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k], jj[k]);
     
 
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps) + 3*N*T/2;
-    printf("E: %f \n", mean(E, maxsteps) + 3*N*T/2);
     results.dE = sqrt(variance(E, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
@@ -263,9 +264,9 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     // at each oneParicleMoves call, we start moving a different particle (offset % N)
     int n; int offset = rand();
     
-    for (int nn=0; nn<N; nn++)
+    for (int n=0; n<N; n++)
     {
-        n = (nn+offset)%N;
+        //n = (nn+offset)%N;
 
         Um = energySingle(R, L, n);
         //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
@@ -504,7 +505,7 @@ void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz)
     *Fy = 0.0;
     *Fz = 0.0;
 
-    for (int l=1; l<N; l++)  
+    for (int l=0; l<N; l++)  
     {
          if (l != i)   
          {
@@ -598,7 +599,7 @@ double energySingle(const double *r, double L, int i)
 {
     double V = 0.0;
     double dx, dy, dz, dr2;
-    for (int l=1; l<N; l++)  {
+    for (int l=0; l<N; l++)  {
         if (l != i)   {
             dx = r[3*l] - r[3*i];
             dx = dx - L*rint(dx/L);
@@ -703,13 +704,13 @@ double pressure(const double *r, double L)
 }
 
 
-inline void shiftSystem(double *r, double L)  // da ricontrollare
+inline void shiftSystem(double *r, double L)
 {
     for (int j=0; j<3*N; j++)
         r[j] = r[j] - L*rint(r[j]/L);
 }
 
-inline void shiftSystem2D(double *r, double L)  // da ricontrollare
+inline void shiftSystem2D(double *r, double L)
 {
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);

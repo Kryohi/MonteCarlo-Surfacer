@@ -8,13 +8,13 @@ dfp = DataFrame(load("positions_N32_M40_r0.10_T0.40.csv"))
 dfw = DataFrame(load("wall_N32_M40_r0.10_T0.40.csv"))
 N = Int((size(dfp,2)-1)/3)
 
-X0 = [dfp[2000, col] for col in 1:3N] # subset of columns
+X0 = [dfp[109676, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-make3Dplot(X0, rho=0.1, T=0.4)
+make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
 gui()
 
 dfd = DataFrame(load("data_N32_M40_r0.10_T0.40.csv"))
-plot(dfd.E[1:50:end])
+plot(dfd.E[109675:1:109676])
 gui()
 acfsimple = MCs.acf(dfd.E, 60000)
 acffast = MCs.fft_acf(dfd.E, 60000)
@@ -24,16 +24,16 @@ tau = sum(acffast)*20
 
 
 
-function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0)
+function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
     Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
-         xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false)
+         xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
         L = cbrt(N/rho)
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
-         xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false)
+         xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
     end
     gui()
 end
