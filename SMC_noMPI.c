@@ -110,8 +110,8 @@ int main(int argc, char** argv)
     /* Initialize Particle Positions */
     
     double * R0 = calloc(3*N, sizeof(double));
-    char filename[32]; 
-    snprintf(filename, 32, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    char filename[36]; 
+    snprintf(filename, 36, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
     {
@@ -136,19 +136,21 @@ int main(int argc, char** argv)
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = 1.0;   // average width of the wall
-    double x0sigma = 0.2;
+    double x0sigma = 0.01;
     double ym = 1.5;    // average bounding energy
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
     
     // save the wall potentials to a csv file 
-    char filename[32];
-    snprintf(filename, 32, "wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 36, "wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE * wall;
     wall = fopen(filename, "w");
+    if (wall == NULL)
+        perror("error while writing on wall.csv");
+    
     fprintf(wall, "c,d\n");
-    for (int m=0; m<M; i++)
+    for (int m=0; m<M; m++)
         fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
         
     fclose(wall);
@@ -167,14 +169,19 @@ int main(int argc, char** argv)
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
+    
     // save the last position of every particle, to use in a later run
     FILE * last_state;
     last_state = fopen(filename, "w");
+    if (last_state == NULL)
+        perror("error while writing on last_state.csv");
+    
     for (int i=0; i<3*N; i++)
         fprintf(last_state, "%0.12f,", MC1.Rfinal[i]);
     
     fclose(last_state);
     free(W);
+    
     return 0;
 }
 
