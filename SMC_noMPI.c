@@ -62,8 +62,8 @@ struct Sim {    // struct containing all the useful results of one simulation
     double acceptance_ratio;
     double cv;
     double tau;
-    struct DoubleArray ACF;
     double Rfinal[3*N];
+    struct DoubleArray ACF;
 } sim;
 
 
@@ -74,7 +74,7 @@ int main(int argc, char** argv)
     int maxsteps = 4000000;
     int gather_lapse = 10;
     int eqsteps = 10000;    // number of steps for the equilibrium pre-simulation
-    double rho = 0.24;
+    double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
     
@@ -87,7 +87,7 @@ int main(int argc, char** argv)
     
     if (access( filename, F_OK ) != -1) 
     {
-        printf("Using previously saved particle configuration...\n");
+        printf("\nUsing previously saved particle configuration...\n");
         FILE * last_state;
         last_state = fopen(filename, "r");  // o cercare ultima riga di positions con fseek?
         for (int i=0; i<3*N; i++)
@@ -96,7 +96,7 @@ int main(int argc, char** argv)
         fclose(last_state);
     
     } else {
-        printf("Initializing system...\n");
+        printf("\nInitializing system...\n");
         initializeBox(L, N, R0); // da sostituire con cavity?
     }
     
@@ -124,12 +124,11 @@ int main(int argc, char** argv)
     printf("\nMean energy: %f ± %f", MC1.E, MC1.dE);
     printf("\nMean pressure: %f ± %f", MC1.P, MC1.dP);
     printf("\nApproximate heat capacity: %f", MC1.cv);
-    printf("\nAverage autocorrelation time: %f\n", MC1.tau);
+    printf("\nAverage autocorrelation time: %f", MC1.tau);
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
     // save the last position of every particle, to use in a later run
-    printf("\nR[0] when in main: %f\n", MC1.Rfinal[0]);
     FILE * last_state;
     last_state = fopen(filename, "w");
     for (int i=0; i<3*N; i++)
