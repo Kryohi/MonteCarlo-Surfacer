@@ -180,7 +180,7 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
     
     shiftSystem(Y, L);
     forces(Y, L, FY);
-    double Uxy = energy(X,L) - energy(Y,L);
+    double Uxy = energy(Y,L) - energy(X,L); // da cambiare in modo da non dover ricalcolare l'energia salvata
     
     // Acceptance probability calculation
     for (int i=0; i<3*N; i++)     // DA SISTEMARE
@@ -188,7 +188,7 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
         WX[i] = (displacement[i] - FX[i]*D) * (displacement[i] - FX[i]*D);  // controllare segni
         WY[i] = (- displacement[i] - FY[i]*D) * (- displacement[i] - FY[i]*D);
         
-        ap[i] = exp(Uxy/T + (WX[i]-WY[i])/(4*D*T));
+        ap[i] = exp(-Uxy/T + (WX[i]-WY[i])/(4*D*T));
     }
     
     free(gauss); free(FX); free(FY); free(displacement); free(WX); free(WY); 
@@ -298,7 +298,7 @@ void forces(const double *r, double L, double *F)
 {
     double dx, dy, dz, dr2, dV;
 
-    for (int l=0; l<N; l++)  {
+    for (int l=1; l<N; l++)  {
          for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
             dx = dx - L*rint(dx/L);
@@ -356,7 +356,7 @@ double energy(const double *r, double L)
 {
     double V = 0.0;
     double dx, dy, dz, dr2;
-    for (int l=0; l<N; l++)  {
+    for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
             dx = dx - L*rint(dx/L);
@@ -394,7 +394,7 @@ double pressure(const double *r, double L)
 {
     double P = 0.0;
     double dx, dy, dz, dr2;
-    for (int l=0; l<N; l++)  {
+    for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
             dx = dx - L*rint(dx/L);
@@ -536,6 +536,8 @@ inline double variance(const double * A, size_t length)  {
 /* TODO
  * 
  * mettere funzioni in file.h esterno
+ * cambiare ordine di molecola da spostare ad ogni ciclo?
+ * deltaX gaussiano sferico o in ogni direzione?
  * 
  * Prestazioni: 
  *

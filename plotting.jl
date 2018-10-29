@@ -1,17 +1,19 @@
-using CSVFiles, DataFrames, Plots
+using Statistics, CSVFiles, DataFrames, Plots
 gr()
 
-run(`gcc -Wall -lm -lfftw3 -O3 langevin_test.c -o exe`)
-run(`./exe`)
+run(`gcc -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
+run(`./smc`)
 
-dfp = DataFrame(load("positions.csv"))
+dfp = DataFrame(load("positions_n32_r0.24_T0.40.csv"))
 N = Int((size(dfp,2)-1)/3)
 
 X0 = [dfp[1, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
 make3Dplot(X0)
 
-
+dfd = DataFrame(load("data_n32_r0.24_T0.40.csv"))
+plot(dfd.E[10:10:end])
+gui()
 
 function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0)
     Plots.default(size=(800,600))
