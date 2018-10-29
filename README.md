@@ -1,2 +1,3 @@
 # MonteCarlo-Surfacer
-Bachelor Thesis project, molecules-surface interaction simulation using Langevin Monte Carlo
+Bachelor Thesis project, molecules-surface interaction simulation using Smart Monte Carlo.
+Uses C + OpenMPI.
