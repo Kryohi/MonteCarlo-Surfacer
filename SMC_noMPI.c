@@ -33,9 +33,12 @@ void markovProbability(const double * R, double * Rn, double L, double T, double
 void oneParticleMoves(double * R, double * Rn, double L, double A, double T, int * j);
 void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz);
 void forces(const double *r, double L, double *F);
-void wallsForces(const double *r, const double *W, double L, double *F);
+//void wallsForces(const double *r, const double *W, double L, double *F);
+void wallsForce(double rx, double ry, double rz, const double * W, double L, double *Fx, double *Fy, double *Fz);
 double energySingle(const double *r, double L, int i);
 double energy(const double *r, double L);
+double wallsEnergy(const double *r, const double *W, double L);
+double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L);
 double pressure(const double *r, double L);
 double sum(const double *A, size_t length);
 int intsum(const int * A, size_t length);
@@ -71,7 +74,7 @@ struct Sim {    // struct containing all the useful results of one simulation
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 4000000;
+    int maxsteps = 10000000;
     int gather_lapse = 10;
     int eqsteps = 10000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
@@ -107,9 +110,9 @@ int main(int argc, char** argv)
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;
+    double x0m = 1.0;   // average width of the wall
     double x0sigma = 0.2;
-    double ym = 1.2;
+    double ym = 1.5;    // average bounding energy
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
@@ -148,7 +151,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     double sim_time;
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 42000;
+    int kmax = 80000;
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
     double *R = malloc(3*N * sizeof(double));
@@ -181,12 +184,12 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     
     // System properties
-    double D = 2e-3;
-    double g = 0.065;
     double L = cbrt(N/rho);
-    double A = g*T;
-    double s = sqrt(4*A*D)/g;
-    A = 5e-8;
+    //double D = 2e-3;
+    //double g = 0.065;
+    //double A = g*T;
+    //double s = sqrt(4*A*D)/g;
+    double A = 4e-8;
     
     
     
@@ -222,7 +225,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     // autocorrelation calculation
     fft_acf(E, gather_steps, kmax, acf);
     simple_acf(E, gather_steps, kmax, acf2);
-    printf("TauSimple: %f \n", sum(acf2,kmax));
+    printf("TauSimple: %f \n", sum(acf2,kmax)*gather_lapse);
 
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
@@ -528,25 +531,36 @@ void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz)
 
 
 /*
- * Calculate the force exerted on the particles by the surface.
+ * Calculate the force exerted on one particle by the surface.
  * Be careful, it doesn't initialize F to zero, it only adds.
  * 
 */
 // TODO
 // sentire forza da tutti i segmenti? Solo quelli più vicini?
 
-void wallsForces(const double *r, const double *W, double L, double *F) 
+void wallsForce(double rx, double ry, double rz, const double * W, double L, double *Fx, double *Fy, double *Fz) 
 { 
-    double dx, dy, dz, dr2, dV;
-     
-    for (int n=0; n<N; n++)  {
-            if (dr2 < L*L/4)    {
-                //dV = -der_LJ(sqrt(dr2))
-                dV = -24 * W[1] / (dr2*dr2*dr2*dr2) + 48 * W[2] / pow(dr2,7.0);
-                F[3*n+0] += dV*dx;
-                F[3*n+1] += dV*dy;
-                F[3*n+2] += dV*dz;
-            }
+    double dx, dy, dz, dr2, dr8, dV;
+    double dw = L/M;
+    
+    for (int m=0; m<M; m++)  
+    {
+        //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
+        dx = rx - m*dw;
+        dx = dx - L*rint(dx/L);
+        dy = ry;
+        dy = dy - L*rint(dy/L);
+        
+        dr2 = dx*dx + (rz+L/2)*(rz+L/2); //miriiiiiii loveeee <3
+        
+        if (dr2 < L*L/4)
+        {
+            dr8 = dr2*dr2*dr2*dr2;
+            dV = 24.0 * W[2*m] / dr8 - 48.0 * W[2*m+1] /(dr8*dr2*dr2*dr2);
+            *Fx -= dV*dx;
+            *Fy -= dV*dy;
+            *Fz -= dV*dz;
+        }
     }
 }
 
@@ -606,14 +620,38 @@ double energySingle(const double *r, double L, int i)
  * Calculate the potential energy between the particles and the wall
  * 
 */
-
-double wallsEnergy(const double *r, double *W, double L)  
+/*
+double wallsEnergy(const double *r, const double *W, double L)  
 {
     double V = 0.0;
     double dz2;
     for (int n=0; n<N; n++)  {
             dz2 = r[3*n+2] * r[3*n+2];
             V += W[1] / pow(pow(dz2,3.),2.) - W[2] / (dz2*dz2*dz2);
+    }
+    return V*4;
+}*/
+
+double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L)  
+{
+    double V = 0.0;
+    double dx, dy, dz, dr2, dr8, dV;
+    double dw = L/M;
+    
+    for (int m=0; m<M; m++)  
+    {
+        //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
+        dx = rx - m*dw;
+        dx = dx - L*rint(dx/L);
+        dy = ry;
+        dy = dy - L*rint(dy/L);
+        
+        dr2 = dx*dx + (rz+L/2)*(rz+L/2); //miriiiiiii loveeee <3
+        
+        if (dr2 < L*L/4)
+        {
+            V += W[2*m]/(dr2*dr2*dr2*dr2*dr2*dr2) - W[2*m+1]/(dr2*dr2*dr2);
+        }
     }
     return V*4;
 }
