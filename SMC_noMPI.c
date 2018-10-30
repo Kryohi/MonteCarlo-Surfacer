@@ -46,7 +46,7 @@ int main(int argc, char** argv)
     
     double * R0 = calloc(3*N, sizeof(double));
     char filename[64]; 
-    snprintf(filename, 64, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
     {
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
     
     // save the wall potentials to a csv file 
-    snprintf(filename, 64, "wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE * wall;
     wall = fopen(filename, "w");
     if (wall == NULL)
@@ -105,12 +105,12 @@ int main(int argc, char** argv)
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
-   // for (int m=0; m<MC1.ACF.length; m++)
-    //    printf("%f\n", MC1.ACF.data[m]);
+    //for (int m=0; m<MC1.ACF.length; m++)
+    //  printf("%f\n", MC1.ACF.data[m]);
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
-    snprintf(filename, 64, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     last_state = fopen(filename, "w");
     if (last_state == NULL)
         perror("error while writing on last_state.csv");
@@ -159,7 +159,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // Initialize csv files
     char filename[64]; 
-    snprintf(filename, 64, "positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -168,7 +168,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 64, "data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
@@ -178,16 +178,25 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     /*  Thermalization   */
 
-    for (int n=0; n<eqsteps; n++)
+    start = clock();
+    for (int n=0; n<eqsteps; n++)   
+    {
+        E[n] = energy(R, L);
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+    }
+    end = clock();
+    sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     
-    printf("\nThermalization completed");
+    printf("\nThermalization completed with");
+    printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
     
     for (int n=0; n<eqsteps; n++)
         jj[n] = 0;
     
+    
     /*  Actual simulation   */
     
+    printf("The expected time of execution is ~%0.1f mins\n", 60*sim_time*maxsteps/eqsteps);
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
@@ -260,7 +269,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
 
 /*
- * Execute a single particle Smart Monte Carlo step for each of the N particles.
+ * Executes a single particle Smart Monte Carlo step for each of the N particles.
  * Each times it starts the loop from a random particle (not sure if this is useful...)
  * It modifies the passed arrays R, Rn and j (the last one containing the ratio of accepted steps).
  * 
@@ -382,7 +391,7 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 
 
 /*
- * Initialize the particle positions as a fcc crystal centered around (0, 0, 0)
+ * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
  * with the shape of a cube with L = cbrt(V)
 */
 
@@ -441,7 +450,7 @@ void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ym
     vecBoxMuller(ymsigma, M, YM);
     
     for (int l=0; l<M; l++)  {
-        W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm); //DA RICONTROLLARE
+        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm); //DA RICONTROLLARE
         W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
     }
     
