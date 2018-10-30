@@ -31,15 +31,18 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 16000000;
-    int gather_lapse = 100;     // number of steps between each acquisition of data
+    int maxsteps = 9000000;
+    int gather_lapse = 60;     // number of steps between each acquisition of data
     int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
-    double rho = 0.1;
-    double T = 0.4;
+    double rho = 0.08;
+    double T = 0.9;
     double L = cbrt(N/rho);
 
     
-    /* Initialize particle positions */
+    /* Initialize particle positions:
+       if a previous simulation was run with the same N, M, rho and T parameters,
+       the last position configuration of that system is picked as a starting configuration.
+    */
     
     double * R0 = calloc(3*N, sizeof(double));
     char filename[64]; 
@@ -63,7 +66,7 @@ int main(int argc, char** argv)
     
     /* Initialize Walls */
     
-    // parameters c and d for every piece of the wall
+    // parameters a and b for every piece of the wall
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
@@ -178,6 +181,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     for (int n=0; n<eqsteps; n++)
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     
+    printf("\nThermalization completed");
+    
     for (int n=0; n<eqsteps; n++)
         jj[n] = 0;
     
@@ -217,17 +222,23 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
     printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
 
+    // total energy and total pressure
+    for (int k=0; k<gather_steps; k++)
+        P[k] += rho*T;
+    
+    for (int n=0; n<maxsteps; n++)
+        E[n] += 3*N*T/2;
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k], jj[k]);
+        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
 
     // Create struct of the mean values and deviations to return
     struct Sim results;
-    results.E = mean(E, maxsteps) + 3*N*T/2;
+    results.E = mean(E, maxsteps);
     results.dE = sqrt(variance(E, maxsteps));
-    results.P = mean(P, gather_steps) + rho*T;
+    results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = sum(acf, kmax);// * gather_lapse;
@@ -250,7 +261,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
 /*
  * Execute a single particle Smart Monte Carlo step for each of the N particles.
- * It modifies the passed pointers R, Rn and j (the last one containing the ratio of accepted steps).
+ * Each times it starts the loop from a random particle (not sure if this is useful...)
+ * It modifies the passed arrays R, Rn and j (the last one containing the ratio of accepted steps).
  * 
 */
 
@@ -271,19 +283,23 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     {
         n = (nn+offset)%N;
 
+        // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
         Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        
+        // same thing for the force exerted on particle n
         force(R, L, n, &Fmx, &Fmy, &Fmz);
         wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
+        // calculate the proposed new position of particle n
         deltaX = Fmx*A/T + displ[3*n];
         deltaY = Fmy*A/T + displ[3*n+1];
         deltaZ = Fmz*A/T + displ[3*n+2];
-        
         Rn[3*n] = R[3*n] + deltaX;
         Rn[3*n+1] = R[3*n+1] + deltaY;
         Rn[3*n+2] = R[3*n+2] + deltaZ;
 
+        // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
         //printf("Un = %f\t", Un);
         Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
@@ -296,10 +312,15 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
 
+        // Calculate the acceptance probability for the single-particle move
+        
         deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) + 2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
 
         ap = exp(-(Un-Um + (deltaX*(Fnx+Fmx) + deltaY*(Fny+Fmy) + deltaZ*(Fnz+Fmz))/2 + deltaW)/T);
 
+        
+        // Accepts the move by comparing ap with a random uniformly distributed probability
+        // If the move is rejected, return Rn to the initial state (equal to R)
         
         if ((double)rand()/(double)RAND_MAX < ap)
         {
@@ -308,7 +329,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             R[3*n+2] = Rn[3*n+2];
             *j += 1;
         }
-        else    {   // riporta proposta Y a stato iniziale X
+        else    {
             Rn[3*n] = R[3*n];
             Rn[3*n+1] = R[3*n+1];
             Rn[3*n+2] = R[3*n+2];
@@ -359,6 +380,12 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 }
 */
 
+
+/*
+ * Initialize the particle positions as a fcc crystal centered around (0, 0, 0)
+ * with the shape of a cube with L = cbrt(V)
+*/
+
 void initializeBox(double L, int N_, double *X) 
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
@@ -399,12 +426,13 @@ void initializeBox(double L, int N_, double *X)
 
 
 /*
- Takes average and standard deviation of the distance from the y-axis and of the maximum binding energy
- and puts in the W array two gaussian distributions of those parameters
+ Takes average and standard deviation of the distance from the y-axis (at f(x)=0) and of the maximum binding energy
+ and puts in the W array two gaussian distributions of resulting parameters "a" and "b".
+ These parameters enter the Lennard-Jones potential in the form V = 4*(a/r^12 - b/r^6).
 */
 // Per ora divide la parete in M fettine rettangolari, e il potenziale verrà generato da una linea per ogni fettina 
 
-void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    
+void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ymsigma, double *W)    
 {
     double * X0 = malloc(M * sizeof(double));
     double * YM = malloc(M * sizeof(double));
@@ -413,8 +441,8 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
     vecBoxMuller(ymsigma, M, YM);
     
     for (int l=0; l<M; l++)  {
-        W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ym)*(YM[l]+ym);
-        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ym);
+        W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm); //DA RICONTROLLARE
+        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
     }
     
     free(X0); free(YM);
