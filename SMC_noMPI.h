@@ -17,9 +17,9 @@
 
 
 // number of slices for the potential of the walls
-#define M 50
+#define M 16
 // number of particles:
-#define N 108
+#define N 32
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD

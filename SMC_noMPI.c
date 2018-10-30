@@ -32,8 +32,8 @@ int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 16000000;
-    int gather_lapse = 100;
-    int eqsteps = 500000;    // number of steps for the equilibrium pre-simulation
+    int gather_lapse = 100;     // number of steps between each acquisition of data
+    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
@@ -67,9 +67,9 @@ int main(int argc, char** argv)
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;   // average width of the wall
-    double x0sigma = 0.01;
-    double ym = 1.5;    // average bounding energy
+    double x0m = 1.0;       // average width of the wall
+    double x0sigma = 0.0;
+    double ym = 1.2;        // average bounding energy
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
@@ -130,7 +130,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 4.2e-5;
+    double A = 4.0e-5;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -227,7 +227,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     struct Sim results;
     results.E = mean(E, maxsteps) + 3*N*T/2;
     results.dE = sqrt(variance(E, maxsteps));
-    results.P = mean(P, gather_steps);
+    results.P = mean(P, gather_steps) + rho*T;
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = sum(acf, kmax);// * gather_lapse;
@@ -235,7 +235,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
     
-    struct DoubleArray ACF;
+    struct DoubleArray ACF; // capire come allocare la memoria nel modo giusto
     ACF.length = kmax;
     ACF.data = acf;
     results.ACF = ACF;
@@ -261,7 +261,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         
     vecBoxMuller(sqrt(2*A), 3*N, displ);
     
-    for (int i=0; i<3*N; i++)   // è necessario qua o si può usare solo una volta all'inizio?
+    for (int i=0; i<3*N; i++)   // controllare se è necessario qua o si può usare solo una volta all'inizio
         Rn[i] = R[i];
     
     // at each oneParicleMoves call, we start moving a different particle (offset % N)
@@ -294,7 +294,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
-        shiftSystem(Rn,L);   // probably useless here
+        shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
 
         deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) + 2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
 
@@ -397,50 +397,12 @@ void initializeBox(double L, int N_, double *X)
 }
 
 
-// TODO
-void initializeCavity(double L, int N_, double *X) // da rendere rettangolare?
-{
-    int Na = (int)(cbrt(N_/4)); // number of cells per dimension
-    double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N_/4))
-        perror("Can't make a cubic FCC crystal with this N :(");
-
-
-    for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
-        for (int j=0; j<Na; j++)    {
-            for (int k=0; k<Na; k++)    {
-                int n = i*Na*Na + j*Na + k; // unique number for each triplet i,j,k
-                X[n*12+0] = a*i;
-                X[n*12+1] = a*j;
-                X[n*12+2] = a*k;
-
-                X[n*12+3] = a*i + a/2;
-                X[n*12+4] = a*j + a/2;
-                X[n*12+5] = a*k;
-
-                X[n*12+6] = a*i + a/2;
-                X[n*12+7] = a*j;
-                X[n*12+8] = a*k + a/2;
-
-                X[n*12+9] = a*i;
-                X[n*12+10] = a*j + a/2;
-                X[n*12+11] = a*k + a/2;
-            }
-        }
-    }
-
-    for (int n=0; n<3*N; n++)
-        X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
-
-    shiftSystem(X,L);
-}
-
 
 /*
  Takes average and standard deviation of the distance from the y-axis and of the maximum binding energy
  and puts in the W array two gaussian distributions of those parameters
 */
-// Per ora divide la parete in M fettine rettangolari
+// Per ora divide la parete in M fettine rettangolari, e il potenziale verrà generato da una linea per ogni fettina 
 
 void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    
 {
@@ -683,6 +645,10 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 }
 
 
+/*
+ * Calculate ONLY the pressure due to the virial contribution
+ * 
+*/
 
 double pressure(const double *r, double L)  
 {

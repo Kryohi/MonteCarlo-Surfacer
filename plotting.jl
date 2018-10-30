@@ -1,25 +1,26 @@
-using Statistics, CSVFiles, DataFrames, Plots
+using Statistics, CSVFiles, DataFrames, Plots, ProgressMeter, FFTW
 pyplot()
 
 run(`gcc -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 run(`./smc`)
 
-dfp = DataFrame(load("positions_N32_M40_r0.10_T0.40.csv"))
-dfw = DataFrame(load("wall_N32_M40_r0.10_T0.40.csv"))
+
+dfp = DataFrame(load("positions_N108_M50_r0.10_T0.40.csv"))
+dfw = DataFrame(load("wall_N108_M50_r0.10_T0.40.csv"))
 N = Int((size(dfp,2)-1)/3)
 
-X0 = [dfp[109676, col] for col in 1:3N] # subset of columns
+X0 = [dfp[9676, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
 make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
 gui()
 
-dfd = DataFrame(load("data_N32_M40_r0.10_T0.40.csv"))
-plot(dfd.E[109675:1:109676])
+dfd = DataFrame(load("data_N108_M50_r0.10_T0.40.csv"))
+plot(dfd.E[1:100:end])
 gui()
-acfsimple = MCs.acf(dfd.E, 60000)
-acffast = MCs.fft_acf(dfd.E, 60000)
-tausimple = sum(acfsimple)*20
-tau = sum(acffast)*20
+acfsimple = acf(dfd.E, 5000)
+acffast = fft_acf(dfd.E, 5000)
+tausimple = sum(acfsimple)
+tau = sum(acffast)
 
 
 
