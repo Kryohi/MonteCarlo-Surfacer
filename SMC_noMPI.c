@@ -31,8 +31,8 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 4000000;
-    int gather_lapse = 20;
+    int maxsteps = 8000000;
+    int gather_lapse = 40;
     int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
@@ -107,6 +107,7 @@ int main(int argc, char** argv)
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
+    snprintf(filename, 64, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     last_state = fopen(filename, "w");
     if (last_state == NULL)
         perror("error while writing on last_state.csv");
@@ -133,7 +134,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 50000;
+    int kmax = 40000;
     
     clock_t start, end;
     double sim_time;
@@ -174,8 +175,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     /*  Thermalization   */
 
-   // for (int n=0; n<eqsteps; n++)
-     //   oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+    for (int n=0; n<eqsteps; n++)
+        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     
     
     /*  Actual simulation   */
@@ -211,7 +212,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     // autocorrelation calculation
     fft_acf(E, maxsteps, kmax, acf);
-    simple_acf(E, maxsteps, kmax, acf2);
+    simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
     printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
 
     
