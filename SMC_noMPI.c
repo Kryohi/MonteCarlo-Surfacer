@@ -629,7 +629,7 @@ double wallsEnergy(const double *r, const double *W, double L)
     
     for (int m=0; m<M; m++)  
     {
-        for (int i=1; i<N; i++)  
+        for (int i=0; i<N; i++)  
         {
             //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
             dx = r[3*i] - m*dw;
