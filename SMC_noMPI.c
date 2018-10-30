@@ -3,23 +3,18 @@
  * 
  * Unire calcolo energia e forze interparticellari e con parete?
  * Aggiungere contributo parete a pressione
- * mettere funzioni in file.h esterno
- * cambiare ordine di molecola da spostare ad ogni ciclo?
+ * chiedere a utente parametri simulazione
  * deltaX gaussiano sferico o in ogni direzione?
- * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
- * salvare i vari file csv in ./Data/
- * energia totale come 1/2 somma delle energie singole
+ * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
+ * energia totale come 1/2 somma delle energie singole?
  * 
  * Prestazioni: 
  *
  * dSMT al post di rand() ? 
- * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
  * confrontare prestazioni con array in stack
  * provare loop-jamming
- * provare loop al contrario  (probabilmente inutile - compilatore)
  * provare uint_fast8_t (probabilmente inutile)
  * aliases per funzioni dentro funzioni con array in lettura
- * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
  * provare c++ con vectorizer di Agner
  * 
  */
@@ -34,7 +29,7 @@ int main(int argc, char** argv)
     int maxsteps = 9000000;
     int gather_lapse = 60;     // number of steps between each acquisition of data
     int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
-    double rho = 0.08;
+    double rho = 0.03;
     double T = 0.9;
     double L = cbrt(N/rho);
 
@@ -105,8 +100,6 @@ int main(int argc, char** argv)
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
-    //for (int m=0; m<MC1.ACF.length; m++)
-    //  printf("%f\n", MC1.ACF.data[m]);
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
@@ -133,7 +126,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 4.0e-5;
+    double A = 2.3e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -175,6 +168,13 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     fprintf(data, "E, P, jj\n");
     
+    FILE * autocorrelation;
+    snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    autocorrelation = fopen(filename, "w");
+    if (autocorrelation == NULL)
+        perror("error while writing on autocorrelation.csv");
+    
+    
     
     /*  Thermalization   */
 
@@ -187,16 +187,17 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     
-    printf("\nThermalization completed with");
+    printf("\nThermalization completed with ");
     printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
     
     for (int n=0; n<eqsteps; n++)
         jj[n] = 0;
     
     
+    
     /*  Actual simulation   */
     
-    printf("The expected time of execution is ~%0.1f mins\n", 60*sim_time*maxsteps/eqsteps);
+    printf("The expected time of execution is ~%0.1f mins\n", 1.05*sim_time*maxsteps/eqsteps/60);
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
@@ -224,12 +225,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     printf("\nTime: %f s\n", sim_time);
 
     
-    /*  Data preparation and storage  */
     
-    // autocorrelation calculation
-    fft_acf(E, maxsteps, kmax, acf);
-    simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
-    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
+    /*  Data preparation and storage  */
 
     // total energy and total pressure
     for (int k=0; k<gather_steps; k++)
@@ -241,6 +238,15 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
         fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+    
+
+    // autocorrelation calculation
+    fft_acf(E, maxsteps, kmax, acf);
+    simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
+    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
+    
+    for (int m=0; m<kmax; m++)
+      fprintf(autocorrelation, "%0.6f\n", acf[m]);
     
 
     // Create struct of the mean values and deviations to return
@@ -262,7 +268,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(ap); free(acf);
-    int fclose(FILE *positions); int fclose(FILE *data);
+    int fclose(FILE *positions); int fclose(FILE *data); int fclose(FILE *autocorrelation);
 
     return results;
 }
@@ -294,11 +300,11 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
-        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         
         // same thing for the force exerted on particle n
         force(R, L, n, &Fmx, &Fmy, &Fmz);
-        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
+        //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
         // calculate the proposed new position of particle n
         deltaX = Fmx*A/T + displ[3*n];
@@ -310,13 +316,10 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
-        //printf("Un = %f\t", Un);
-        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
-        //printf("%f\n", Un);
-        //printf("Fnx = %f\t", Fnx);
+        //Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
+
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        //printf("%f\t", Fnx);
-        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
+        //wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
