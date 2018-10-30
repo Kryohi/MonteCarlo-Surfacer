@@ -31,9 +31,9 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 8000000;
-    int gather_lapse = 40;
-    int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
+    int maxsteps = 16000000;
+    int gather_lapse = 100;
+    int eqsteps = 500000;    // number of steps for the equilibrium pre-simulation
     double rho = 0.1;
     double T = 0.4;
     double L = cbrt(N/rho);
@@ -130,11 +130,11 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 4.0e-5;
+    double A = 4.2e-5;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 40000;
+    int kmax = 42000;
     
     clock_t start, end;
     double sim_time;
@@ -178,6 +178,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     for (int n=0; n<eqsteps; n++)
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     
+    for (int n=0; n<eqsteps; n++)
+        jj[n] = 0;
     
     /*  Actual simulation   */
     
@@ -265,14 +267,14 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     // at each oneParicleMoves call, we start moving a different particle (offset % N)
     int n; int offset = rand();
     
-    for (int n=0; n<N; n++)
+    for (int nn=0; nn<N; nn++)
     {
-        //n = (nn+offset)%N;
+        n = (nn+offset)%N;
 
         Um = energySingle(R, L, n);
-        //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         force(R, L, n, &Fmx, &Fmy, &Fmz);
-        //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
+        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
         deltaX = Fmx*A/T + displ[3*n];
         deltaY = Fmy*A/T + displ[3*n+1];
@@ -284,12 +286,12 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         Un = energySingle(Rn, L, n);
         //printf("Un = %f\t", Un);
-        //Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
+        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
         //printf("%f\n", Un);
         //printf("Fnx = %f\t", Fnx);
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
         //printf("%f\t", Fnx);
-        //wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
+        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // probably useless here
@@ -361,8 +363,8 @@ void initializeBox(double L, int N_, double *X)
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N_/4))
-        perror("Can't make a cubic FCC crystal with this N :(");
+    //if (Na != cbrt(N_/4)) //TODO
+        //perror("Can't make a cubic FCC crystal with this N :(");
 
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
