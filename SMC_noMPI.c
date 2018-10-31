@@ -16,6 +16,9 @@
 
 int main(int argc, char** argv)
 {
+    int *now = currentTime();
+    printf("\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
+
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 9000000;
     int gather_lapse = 60;     // number of steps between each acquisition of data
@@ -23,7 +26,6 @@ int main(int argc, char** argv)
     double rho = 0.03;
     double T = 0.9;
     double L = cbrt(N/rho);
-
     
     /* Initialize particle positions:
        if a previous simulation was run with the same N, M, rho and T parameters,
@@ -77,7 +79,7 @@ int main(int argc, char** argv)
     
     
     /* Prepare the results and start the simulation(s) */
-    
+        
     struct Sim MC1;
     
     MC1 = sMC(rho, T, W, R0, maxsteps, gather_lapse, eqsteps);
@@ -249,7 +251,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = sum(acf, kmax);// * gather_lapse;
-    results.cv = variance2(E, (int)rint(results.tau/2), gather_steps) / (T*T);
+    results.cv = variance_corr(E, (int)rint(results.tau/2), gather_steps) / (T*T);
     
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
     
@@ -445,7 +447,7 @@ void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ym
     vecBoxMuller(ymsigma, M, YM);
     
     for (int l=0; l<M; l++)  {
-        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm); //DA RICONTROLLARE
+        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm);
         W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
     }
     
@@ -763,7 +765,7 @@ void fft_acf(const double *H, size_t length, int k_max, double * acf)
     p = fftw_plan_dft_r2c_1d(lfft, Z, fvi, FFTW_ESTIMATE);
     fftw_execute(p);
 
-    for (int i=0; i<lfft; i++)  // compute the abs2 of the transform
+    for (int i=0; i<lfft; i++)  // compute the abs2 of the transform (power spectral density of Z)
         temp[i] = fvi[i] * conj(fvi[i]) + 0.0I;
     
     p = fftw_plan_dft_1d(lfft, temp, C_H, FFTW_BACKWARD, FFTW_ESTIMATE);
@@ -784,7 +786,7 @@ void simple_acf(const double *H, size_t length, int k_max, double * acf)
         perror("error: number of datapoints too low to calculate autocorrelation");
     
     double C_H_temp;
-    double * Z = fftw_malloc(length * sizeof(double));
+    double * Z = malloc(length * sizeof(double));
     double meanH = mean(H, length);
     
     for (int i=0; i<length; i++)
@@ -794,16 +796,27 @@ void simple_acf(const double *H, size_t length, int k_max, double * acf)
     for (int k=0; k<k_max; k++) {
         C_H_temp = 0.0;
         
-        for (int i=0; i<length-k_max; i++)
+        for (int i=0; i<length-k_max-1; i++)
             C_H_temp += Z[i] * Z[i+k];
 
-        acf[k] = C_H_temp/length;
+        acf[k] = C_H_temp/(length-k_max); // ci vuole il -k_max?
     }
     
-    for (int k=0; k<k_max; k++)
-        acf[k] = acf[k] / acf[0]; // unbiased and normalized autocorrelation function
+    for (int k=k_max-1; k>=0; k--)
+        acf[k] = acf[k] / acf[0]; // normalized autocorrelation function
 
     free(Z);
+}
+
+
+/*
+ * Divides the volume in N voxels and computes the particle density in each voxel
+ * 
+ */
+
+void localDensity()
+{
+    
 }
 
 
@@ -875,17 +888,36 @@ inline double variance(const double * A, size_t length)
     return var;
 }
 
-inline double variance2(const double * A, int buco, size_t length)
+inline double variance_corr(const double * A, int tau, size_t length)
 {
     double var = 0.0;
     double mean_A = mean(A,length);
-    int newlength = (int)(length/buco);
+    int newlength = (int)(length/tau);
     
     for (int i = 0; i < newlength; i++)
-        var += (A[i*buco] - mean_A)*(A[i*buco] - mean_A);
+        var += (A[i*tau] - mean_A)*(A[i*tau] - mean_A);
     
-    return var/newlength;
+    return var/(newlength-1);
 }
 
+
+/*
+ * Misc functions
+ * 
+ */
+
+int * currentTime()
+{
+    time_t now;
+    struct tm *now_tm;
+    static int currenttime[2];
+
+    now = time(NULL);
+    now_tm = localtime(&now);
+    currenttime[0] = now_tm->tm_hour;
+    currenttime[1] = now_tm->tm_min;
+    
+    return currenttime;
+}
 
 
