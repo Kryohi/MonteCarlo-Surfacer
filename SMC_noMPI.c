@@ -7,7 +7,7 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
- * 
+ * unica stringa per nomi dei file
  * 
  */
 
@@ -24,6 +24,7 @@ int main(int argc, char** argv)
     double T = 0.9;
     double L = cbrt(N/rho);
 
+    
     /* Initialize particle positions:
        if a previous simulation was run with the same N, M, rho and T parameters,
        the last position configuration of that system is picked as a starting configuration.
@@ -164,6 +165,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     if (autocorrelation == NULL)
         perror("error while writing on autocorrelation.csv");
     
+    fprintf(autocorrelation, "CH\n");
     
     
     /*  Thermalization   */
@@ -187,7 +189,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     /*  Actual simulation   */
     
-    printf("The expected time of execution is ~%0.1f mins\n", 1.05*sim_time*maxsteps/eqsteps/60);
+    printf("The expected time of execution is ~%0.1f minutes.\n", 1.05*sim_time*maxsteps/eqsteps/60);
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
