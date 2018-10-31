@@ -8,17 +8,8 @@
  * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
  * 
- * Prestazioni: 
- *
- * dSMT al post di rand() ? 
- * confrontare prestazioni con array in stack
- * provare loop-jamming
- * provare uint_fast8_t (probabilmente inutile)
- * aliases per funzioni dentro funzioni con array in lettura
- * provare c++ con vectorizer di Agner
  * 
  */
-
 
 #include "SMC_noMPI.h"
 
@@ -33,7 +24,6 @@ int main(int argc, char** argv)
     double T = 0.9;
     double L = cbrt(N/rho);
 
-    
     /* Initialize particle positions:
        if a previous simulation was run with the same N, M, rho and T parameters,
        the last position configuration of that system is picked as a starting configuration.
@@ -85,7 +75,7 @@ int main(int argc, char** argv)
     
     
     
-    /* Prepare the results and start the simulations */
+    /* Prepare the results and start the simulation(s) */
     
     struct Sim MC1;
     
@@ -738,10 +728,10 @@ inline void vecBoxMuller(double sigma, size_t length, double * A)
     double x1, x2;
 
     for (int i=0; i<round(length/2); i++) {
-        x1 = (double)rand() / (double)RAND_MAX;
-        x2 = (double)rand() / (double)RAND_MAX;
-        A[2*i] = sigma * sqrt(-2*log(x1)) * cos(2*M_PI*x2);
-        A[2*i+1] = sigma * sqrt(-2*log(x2)) * sin(2*M_PI*x1);
+        x1 = (double) rand() / (RAND_MAX + 1.0);
+        x2 = (double) rand() / (RAND_MAX + 1.0);
+        A[2*i] = sigma * sqrt(-2*log(1-x1)) * cos(2*M_PI*x2);
+        A[2*i+1] = sigma * sqrt(-2*log(1-x2)) * sin(2*M_PI*x1);
     }
 }
 
