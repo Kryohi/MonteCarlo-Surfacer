@@ -7,7 +7,7 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
- * unica stringa per nomi dei file
+ * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
  * 
  */
 
@@ -58,7 +58,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;       // average width of the wall
+    double x0m = L/20;       // average width of the wall
     double x0sigma = 0.0;
     double ym = 1.2;        // average bounding energy
     double ymsigma = 0.3;
@@ -552,7 +552,7 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         dx = dx - L*rint(dx/L);
         //dy = ry;
         //dy = dy - L*rint(dy/L);
-        dz = rz;
+        dz = rz;    // controllare segno / casi in cui potrebbe dare risultati non voluti
         dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)

@@ -1,5 +1,5 @@
 using Statistics, CSVFiles, DataFrames, Printf, Plots, ProgressMeter, FFTW
-plotlyjs()
+plotly(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 #run(`./smc`)
@@ -16,13 +16,13 @@ dfd = DataFrame(load(string("./Data/data", parameters)))
 C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
 
 ## Plot a configuration in 3D
-X0 = [dfp[9676, col] for col in 1:3N] # subset of columns
+X0 = [dfp[8676, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
+make3Dplot(X0, rho=rho, T=T, reuse=false)
 gui()
 
 ## Check energy
-plot(dfd.E[1:100:end], reuse=false, legend=false)
+Plots.plot(dfd.E[1:100:end], reuse=false, legend=false)
 gui()
 plot(C_H[1][1:5000], legend=false)
 gui()
@@ -39,14 +39,13 @@ function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
     #Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
-        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
+        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue,Plots.stroke(0)), w=5,
          xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
         L = cbrt(N/rho)
-        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
+        Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue, Plots.stroke(0)),w=5,
          xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
     end
-    gui()
 end
 
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true, reuse=true)
@@ -66,7 +65,6 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true, re
     end
     file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
     save && savefig(file)
-    gui()
 end
 
 
