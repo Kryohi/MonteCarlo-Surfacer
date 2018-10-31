@@ -1,20 +1,27 @@
-using Statistics, CSVFiles, DataFrames, Plots, ProgressMeter, FFTW
+using Statistics, CSVFiles, DataFrames, Printf, Plots, ProgressMeter, FFTW
 pyplot()
 
-run(`gcc -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
-run(`./smc`)
+#run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
+#run(`./smc`)
 
+N = 32
+M = 16
+rho = 0.03
+T = 0.9
 
-dfp = DataFrame(load("positions_N108_M50_r0.10_T0.40.csv"))
-dfw = DataFrame(load("wall_N108_M50_r0.10_T0.40.csv"))
-N = Int((size(dfp,2)-1)/3)
+parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
+dfp = DataFrame(load(string("./Data/positions", parameters)))
+dfw = DataFrame(load(string("./Data/wall", parameters)))
+dfd = DataFrame(load(string("./Data/data", parameters)))
+acf = DataFrame(load(string("./Data/autocorrelation", parameters)))
 
+## Plot a configuration in 3D
 X0 = [dfp[9676, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
 make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
 gui()
 
-dfd = DataFrame(load("data_N108_M50_r0.10_T0.40.csv"))
+## Check energy
 plot(dfd.E[1:100:end])
 gui()
 acfsimple = acf(dfd.E, 5000)
