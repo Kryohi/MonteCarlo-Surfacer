@@ -24,10 +24,12 @@ gui()
 ## Check energy
 plot(dfd.E[1:100:end])
 gui()
+plot(plot(acf[1]))
 acfsimple = acf(dfd.E, 5000)
 acffast = fft_acf(dfd.E, 5000)
 tausimple = sum(acfsimple)
 tau = sum(acffast)
+
 
 
 

@@ -171,7 +171,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     /*  Thermalization   */
 
     start = clock();
-    for (int n=0; n<eqsteps; n++)   
+    for (int n=0; n<eqsteps; n++)
     {
         E[n] = energy(R, L);
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
@@ -238,7 +238,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
     
     for (int m=0; m<kmax; m++)
-      fprintf(autocorrelation, "%0.6f\n", acf[m]);
+      fprintf(autocorrelation, "%0.6f\n", acf2[m]);
     
 
     // Create struct of the mean values and deviations to return
@@ -770,7 +770,7 @@ void fft_acf(const double *H, size_t length, int k_max, double * acf)
     fftw_execute(p);
 
     for (int i=0; i<k_max; i++)
-        acf[i] = creal(C_H[i]) / creal(C_H[1]);
+        acf[i] = creal(C_H[i]) / creal(C_H[0]);
 
 
     fftw_destroy_plan(p);
