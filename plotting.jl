@@ -1,5 +1,5 @@
 using Statistics, CSVFiles, DataFrames, Printf, Plots, ProgressMeter, FFTW
-pyplot()
+plotlyjs()
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 #run(`./smc`)
@@ -13,7 +13,7 @@ parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
 dfp = DataFrame(load(string("./Data/positions", parameters)))
 dfw = DataFrame(load(string("./Data/wall", parameters)))
 dfd = DataFrame(load(string("./Data/data", parameters)))
-acf = DataFrame(load(string("./Data/autocorrelation", parameters)))
+C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
 
 ## Plot a configuration in 3D
 X0 = [dfp[9676, col] for col in 1:3N] # subset of columns
@@ -22,18 +22,21 @@ make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
 gui()
 
 ## Check energy
-plot(dfd.E[1:100:end])
+plot(dfd.E[1:100:end], reuse=false, legend=false)
 gui()
-acfsimple = acf(dfd.E, 5000)
-acffast = fft_acf(dfd.E, 5000)
-tausimple = sum(acfsimple)
-tau = sum(acffast)
+plot(C_H[1][1:5000], legend=false)
+gui()
+#acfsimple = acf(dfd.E, 10000)
+#acffast = fft_acf(dfd.E, 5000)
+#tausimple = sum(acfsimple)
+#tau = sum(acffast)
+
 
 
 
 
 function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
-    Plots.default(size=(800,600))
+    #Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
@@ -46,8 +49,8 @@ function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
     gui()
 end
 
-function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true)
-    Plots.default(size=(800,600))
+function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true, reuse=true)
+    #Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension
