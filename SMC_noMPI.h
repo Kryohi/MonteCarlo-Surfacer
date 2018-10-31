@@ -68,7 +68,7 @@ int intsum(const int * A, size_t length);
 double mean(const double * A, size_t length);
 double intmean(const int * A, size_t length);
 double variance(const double * A, size_t length);
-double variance_corr(const double * A, int intervallo, size_t length);
+double variance_corr(const double * A, double tau, size_t length);
 void zeros(size_t length, double *A);
 void elforel(const double *A, const double * B, double * C, size_t length);
 void simple_acf(const double *H, size_t length, int k_max, double * acf);

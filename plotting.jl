@@ -22,21 +22,21 @@ make3Dplot(X0, rho=0.1, T=0.4, reuse=false)
 gui()
 
 ## Check energy
-plot(dfd.E[1:100:end], reuse=false)
+plot(dfd.E[1:100:end], reuse=false, legend=false)
 gui()
-plot(C_H[1][2:5000])
+plot(C_H[1][1:5000], legend=false)
 gui()
-acfsimple = acf(dfd.E, 10000)
-acffast = fft_acf(dfd.E, 5000)
-tausimple = sum(acfsimple)
-tau = sum(acffast)
+#acfsimple = acf(dfd.E, 10000)
+#acffast = fft_acf(dfd.E, 5000)
+#tausimple = sum(acfsimple)
+#tau = sum(acffast)
 
 
 
 
 
 function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
-    Plots.default(size=(800,600))
+    #Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
         Plots.scatter(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(7,0.9,:blue,Plots.stroke(0)),w=7,
@@ -50,7 +50,7 @@ function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
 end
 
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, rho=-1.0, save=true, reuse=true)
-    Plots.default(size=(800,600))
+    #Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
     L = cbrt(N/rho)
     Na = round(Int,∛(N/4)) # number of cells per dimension

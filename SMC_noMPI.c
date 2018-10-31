@@ -17,7 +17,7 @@
 int main(int argc, char** argv)
 {
     int *now = currentTime();
-    printf("\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
+    printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 9000000;
@@ -119,7 +119,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 2.3e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
+    double A = 2.0e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -236,22 +236,25 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // autocorrelation calculation
     fft_acf(E, maxsteps, kmax, acf);
-    simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
-    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
+    double tau = sum(acf,kmax);
+    //simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
+    //printf("TauSimple: %f \n", tau);
     
     for (int m=0; m<kmax; m++)
-      fprintf(autocorrelation, "%0.6f\n", acf2[m]);
+      fprintf(autocorrelation, "%0.6f\n", acf[m]);
     
 
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps);
     results.dE = sqrt(variance(E, maxsteps));
+    printf("variance_corr(E) = %f \n", sqrt(variance_corr(E, tau, maxsteps)));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
-    results.tau = sum(acf, kmax);// * gather_lapse;
-    results.cv = variance_corr(E, (int)rint(results.tau/2), gather_steps) / (T*T);
+    results.tau = tau;// * gather_lapse;
+    results.cv = variance_corr(E, tau, maxsteps) / (T*T);
+    printf("tau_noncorr = %f \n", variance(E, maxsteps) / (T*T));
     
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
     
@@ -294,11 +297,11 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
-        //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
         
         // same thing for the force exerted on particle n
         force(R, L, n, &Fmx, &Fmy, &Fmz);
-        //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
+        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
         // calculate the proposed new position of particle n
         deltaX = Fmx*A/T + displ[3*n];
@@ -310,10 +313,10 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
-        //Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
+        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
 
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        //wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
+        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
         shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
@@ -459,6 +462,7 @@ void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ym
  * Calculate the 3N array of forces acting on each particles due to the interaction with other particles
  * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
 */
+// Manca funzione analoga per contributo pareti (servirà?)
 
 void forces(const double *r, double L, double *F) 
 {
@@ -544,19 +548,19 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
     for (int m=0; m<M; m++)  
     {
         //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-        dx = rx - m*dw;
+        dx = rx - m*dw + dw/2;
         dx = dx - L*rint(dx/L);
-        dy = ry;
-        dy = dy - L*rint(dy/L);
-        dz = rz + L/2;
-        dr2 = dx*dx + dz*dz; //miriiiiiii loveeee <3
+        //dy = ry;
+        //dy = dy - L*rint(dy/L);
+        dz = rz;
+        dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)
         {
             dr8 = dr2*dr2*dr2*dr2;
             dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] /(dr8*dr2*dr2*dr2);
             *Fx -= dV*dx;
-            *Fy -= dV*dy;
+            //*Fy -= dV*dy;
             *Fz -= dV*dz;
         }
     }
@@ -630,11 +634,11 @@ double wallsEnergy(const double *r, const double *W, double L)
         for (int i=0; i<N; i++)  
         {
             //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-            dx = r[3*i] - m*dw;
+            dx = r[3*i] - m*dw + dw/2;
             dx = dx - L*rint(dx/L);
-            dy = r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + L/2;
+            //dy = r[3*i+1];
+            //dy = dy - L*rint(dy/L);
+            dz = r[3*i+2];  // + L/2 
             dr2 = dx*dx + dz*dz;
         
             if (dr2 < L*L/4)    // da togliere?
@@ -662,11 +666,11 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
     for (int m=0; m<M; m++)  
     {
         //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-        dx = rx - m*dw;
+        dx = rx - m*dw + dw/2;
         dx = dx - L*rint(dx/L);
-        dy = ry;
-        dy = dy - L*rint(dy/L);
-        dz = rz + L/2;
+        //dy = ry;
+        //dy = dy - L*rint(dy/L);
+        dz = rz; // should be abs(rz), but it dosn't matter since only its square is used
         dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)
@@ -888,14 +892,18 @@ inline double variance(const double * A, size_t length)
     return var;
 }
 
-inline double variance_corr(const double * A, int tau, size_t length)
+inline double variance_corr(const double * A, double tau, size_t length)
 {
     double var = 0.0;
     double mean_A = mean(A,length);
-    int newlength = (int)(length/tau);
+    int tauint = (int) (floor(tau));
+    int newlength = (int) floor(length/tauint);
+    
+    if (newlength < 1000)
+        printf("\nThere doesn't seem to be enough data to compute the variance\n");
     
     for (int i = 0; i < newlength; i++)
-        var += (A[i*tau] - mean_A)*(A[i*tau] - mean_A);
+        var += (A[i*tauint] - mean_A)*(A[i*tauint] - mean_A);
     
     return var/(newlength-1);
 }
