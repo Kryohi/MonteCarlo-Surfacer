@@ -3,27 +3,13 @@
  * 
  * Unire calcolo energia e forze interparticellari e con parete?
  * Aggiungere contributo parete a pressione
- * mettere funzioni in file.h esterno
- * cambiare ordine di molecola da spostare ad ogni ciclo?
+ * chiedere a utente parametri simulazione
  * deltaX gaussiano sferico o in ogni direzione?
- * decidere cosa mettere come macro e cosa come variabiel passata a simulation (tipo gather_lapse)
- * salvare i vari file csv in ./Data/
- * energia totale come 1/2 somma delle energie singole
+ * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
+ * energia totale come 1/2 somma delle energie singole?
  * 
- * Prestazioni: 
- *
- * dSMT al post di rand() ? 
- * sostituire funzioni stupide con macro (probabilmente inutile - compilatore + inlining)
- * confrontare prestazioni con array in stack
- * provare loop-jamming
- * provare loop al contrario  (probabilmente inutile - compilatore)
- * provare uint_fast8_t (probabilmente inutile)
- * aliases per funzioni dentro funzioni con array in lettura
- * bitwise shift per moltiplicare/dividere per 2  (probabilmente inutile - compilatore)
- * provare c++ con vectorizer di Agner
  * 
  */
-
 
 #include "SMC_noMPI.h"
 
@@ -31,19 +17,21 @@
 int main(int argc, char** argv)
 {
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 4000000;
-    int gather_lapse = 20;
-    int eqsteps = 100000;    // number of steps for the equilibrium pre-simulation
-    double rho = 0.1;
-    double T = 0.4;
+    int maxsteps = 9000000;
+    int gather_lapse = 60;     // number of steps between each acquisition of data
+    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
+    double rho = 0.03;
+    double T = 0.9;
     double L = cbrt(N/rho);
 
-    
-    /* Initialize particle positions */
+    /* Initialize particle positions:
+       if a previous simulation was run with the same N, M, rho and T parameters,
+       the last position configuration of that system is picked as a starting configuration.
+    */
     
     double * R0 = calloc(3*N, sizeof(double));
     char filename[64]; 
-    snprintf(filename, 64, "last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
     {
@@ -63,19 +51,19 @@ int main(int argc, char** argv)
     
     /* Initialize Walls */
     
-    // parameters c and d for every piece of the wall
+    // parameters a and b for every piece of the wall
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;   // average width of the wall
-    double x0sigma = 0.01;
-    double ym = 1.5;    // average bounding energy
+    double x0m = 1.0;       // average width of the wall
+    double x0sigma = 0.0;
+    double ym = 1.2;        // average bounding energy
     double ymsigma = 0.3;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
     
     // save the wall potentials to a csv file 
-    snprintf(filename, 64, "wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE * wall;
     wall = fopen(filename, "w");
     if (wall == NULL)
@@ -87,7 +75,7 @@ int main(int argc, char** argv)
     
     
     
-    /* Prepare the results and start the simulations */
+    /* Prepare the results and start the simulation(s) */
     
     struct Sim MC1;
     
@@ -102,11 +90,10 @@ int main(int argc, char** argv)
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
     printf("\n");
     
-   // for (int m=0; m<MC1.ACF.length; m++)
-    //    printf("%f\n", MC1.ACF.data[m]);
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     last_state = fopen(filename, "w");
     if (last_state == NULL)
         perror("error while writing on last_state.csv");
@@ -129,11 +116,11 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 4.0e-5;
+    double A = 2.3e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 50000;
+    int kmax = 42000;
     
     clock_t start, end;
     double sim_time;
@@ -155,7 +142,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // Initialize csv files
     char filename[64]; 
-    snprintf(filename, 64, "positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -164,22 +151,43 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 64, "data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
     
     fprintf(data, "E, P, jj\n");
     
+    FILE * autocorrelation;
+    snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    autocorrelation = fopen(filename, "w");
+    if (autocorrelation == NULL)
+        perror("error while writing on autocorrelation.csv");
+    
+    
     
     /*  Thermalization   */
 
-   // for (int n=0; n<eqsteps; n++)
-     //   oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+    start = clock();
+    for (int n=0; n<eqsteps; n++)   
+    {
+        E[n] = energy(R, L);
+        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+    }
+    end = clock();
+    sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
+    
+    printf("\nThermalization completed with ");
+    printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
+    
+    for (int n=0; n<eqsteps; n++)
+        jj[n] = 0;
+    
     
     
     /*  Actual simulation   */
     
+    printf("The expected time of execution is ~%0.1f mins\n", 1.05*sim_time*maxsteps/eqsteps/60);
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
@@ -207,22 +215,33 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     printf("\nTime: %f s\n", sim_time);
 
     
-    /*  Data preparation and storage  */
     
-    // autocorrelation calculation
-    fft_acf(E, maxsteps, kmax, acf);
-    simple_acf(E, maxsteps, kmax, acf2);
-    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
+    /*  Data preparation and storage  */
 
+    // total energy and total pressure
+    for (int k=0; k<gather_steps; k++)
+        P[k] += rho*T;
+    
+    for (int n=0; n<maxsteps; n++)
+        E[n] += 3*N*T/2;
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k], jj[k]);
+        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+    
+
+    // autocorrelation calculation
+    fft_acf(E, maxsteps, kmax, acf);
+    simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
+    printf("TauSimple: %f \n", sum(acf2,kmax));//*gather_lapse);
+    
+    for (int m=0; m<kmax; m++)
+      fprintf(autocorrelation, "%0.6f\n", acf[m]);
     
 
     // Create struct of the mean values and deviations to return
     struct Sim results;
-    results.E = mean(E, maxsteps) + 3*N*T/2;
+    results.E = mean(E, maxsteps);
     results.dE = sqrt(variance(E, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
@@ -232,22 +251,23 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
     
-    struct DoubleArray ACF;
+    struct DoubleArray ACF; // capire come allocare la memoria nel modo giusto
     ACF.length = kmax;
     ACF.data = acf;
     results.ACF = ACF;
 
     // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(ap); free(acf);
-    int fclose(FILE *positions); int fclose(FILE *data);
+    int fclose(FILE *positions); int fclose(FILE *data); int fclose(FILE *autocorrelation);
 
     return results;
 }
 
 
 /*
- * Execute a single particle Smart Monte Carlo step for each of the N particles.
- * It modifies the passed pointers R, Rn and j (the last one containing the ratio of accepted steps).
+ * Executes a single particle Smart Monte Carlo step for each of the N particles.
+ * Each times it starts the loop from a random particle (not sure if this is useful...)
+ * It modifies the passed arrays R, Rn and j (the last one containing the ratio of accepted steps).
  * 
 */
 
@@ -258,45 +278,51 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         
     vecBoxMuller(sqrt(2*A), 3*N, displ);
     
-    for (int i=0; i<3*N; i++)   // è necessario qua o si può usare solo una volta all'inizio?
+    for (int i=0; i<3*N; i++)   // controllare se è necessario qua o si può usare solo una volta all'inizio
         Rn[i] = R[i];
     
     // at each oneParicleMoves call, we start moving a different particle (offset % N)
     int n; int offset = rand();
     
-    for (int n=0; n<N; n++)
+    for (int nn=0; nn<N; nn++)
     {
-        //n = (nn+offset)%N;
+        n = (nn+offset)%N;
 
+        // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
         //Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        
+        // same thing for the force exerted on particle n
         force(R, L, n, &Fmx, &Fmy, &Fmz);
         //wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
 
+        // calculate the proposed new position of particle n
         deltaX = Fmx*A/T + displ[3*n];
         deltaY = Fmy*A/T + displ[3*n+1];
         deltaZ = Fmz*A/T + displ[3*n+2];
-        
         Rn[3*n] = R[3*n] + deltaX;
         Rn[3*n+1] = R[3*n+1] + deltaY;
         Rn[3*n+2] = R[3*n+2] + deltaZ;
 
+        // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
-        //printf("Un = %f\t", Un);
         //Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
-        //printf("%f\n", Un);
-        //printf("Fnx = %f\t", Fnx);
+
         force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        //printf("%f\t", Fnx);
         //wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
         //printf("%f\n", Fnx);
 
-        shiftSystem(Rn,L);   // probably useless here
+        shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
 
+        // Calculate the acceptance probability for the single-particle move
+        
         deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) + 2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
 
         ap = exp(-(Un-Um + (deltaX*(Fnx+Fmx) + deltaY*(Fny+Fmy) + deltaZ*(Fnz+Fmz))/2 + deltaW)/T);
 
+        
+        // Accepts the move by comparing ap with a random uniformly distributed probability
+        // If the move is rejected, return Rn to the initial state (equal to R)
         
         if ((double)rand()/(double)RAND_MAX < ap)
         {
@@ -305,7 +331,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             R[3*n+2] = Rn[3*n+2];
             *j += 1;
         }
-        else    {   // riporta proposta Y a stato iniziale X
+        else    {
             Rn[3*n] = R[3*n];
             Rn[3*n+1] = R[3*n+1];
             Rn[3*n+2] = R[3*n+2];
@@ -356,12 +382,18 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 }
 */
 
+
+/*
+ * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
+ * with the shape of a cube with L = cbrt(V)
+*/
+
 void initializeBox(double L, int N_, double *X) 
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N_/4))
-        perror("Can't make a cubic FCC crystal with this N :(");
+    //if (Na != cbrt(N_/4)) //TODO
+        //perror("Can't make a cubic FCC crystal with this N :(");
 
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
@@ -393,53 +425,16 @@ void initializeBox(double L, int N_, double *X)
     shiftSystem(X,L);
 }
 
-
-// TODO
-void initializeCavity(double L, int N_, double *X) // da rendere rettangolare?
-{
-    int Na = (int)(cbrt(N_/4)); // number of cells per dimension
-    double a = L / Na;  // interparticle distance
-    if (Na != cbrt(N_/4))
-        perror("Can't make a cubic FCC crystal with this N :(");
-
-
-    for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
-        for (int j=0; j<Na; j++)    {
-            for (int k=0; k<Na; k++)    {
-                int n = i*Na*Na + j*Na + k; // unique number for each triplet i,j,k
-                X[n*12+0] = a*i;
-                X[n*12+1] = a*j;
-                X[n*12+2] = a*k;
-
-                X[n*12+3] = a*i + a/2;
-                X[n*12+4] = a*j + a/2;
-                X[n*12+5] = a*k;
-
-                X[n*12+6] = a*i + a/2;
-                X[n*12+7] = a*j;
-                X[n*12+8] = a*k + a/2;
-
-                X[n*12+9] = a*i;
-                X[n*12+10] = a*j + a/2;
-                X[n*12+11] = a*k + a/2;
-            }
-        }
-    }
-
-    for (int n=0; n<3*N; n++)
-        X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
-
-    shiftSystem(X,L);
-}
 
 
 /*
- Takes average and standard deviation of the distance from the y-axis and of the maximum binding energy
- and puts in the W array two gaussian distributions of those parameters
+ Takes average and standard deviation of the distance from the y-axis (at f(x)=0) and of the maximum binding energy
+ and puts in the W array two gaussian distributions of resulting parameters "a" and "b".
+ These parameters enter the Lennard-Jones potential in the form V = 4*(a/r^12 - b/r^6).
 */
-// Per ora divide la parete in M fettine rettangolari
+// Per ora divide la parete in M fettine rettangolari, e il potenziale verrà generato da una linea per ogni fettina 
 
-void initializeWalls(double L, double x0m, double x0sigma, double ym, double ymsigma, double *W)    
+void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ymsigma, double *W)    
 {
     double * X0 = malloc(M * sizeof(double));
     double * YM = malloc(M * sizeof(double));
@@ -448,8 +443,8 @@ void initializeWalls(double L, double x0m, double x0sigma, double ym, double yms
     vecBoxMuller(ymsigma, M, YM);
     
     for (int l=0; l<M; l++)  {
-        W[2*l] = 2*pow(X0[l]+x0m, 12.) * (YM[l]+ym)*(YM[l]+ym);
-        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ym);
+        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm); //DA RICONTROLLARE
+        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
     }
     
     free(X0); free(YM);
@@ -628,7 +623,7 @@ double wallsEnergy(const double *r, const double *W, double L)
     
     for (int m=0; m<M; m++)  
     {
-        for (int i=1; i<N; i++)  
+        for (int i=0; i<N; i++)  
         {
             //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
             dx = r[3*i] - m*dw;
@@ -680,6 +675,10 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 }
 
 
+/*
+ * Calculate ONLY the pressure due to the virial contribution
+ * 
+*/
 
 double pressure(const double *r, double L)  
 {
@@ -729,10 +728,10 @@ inline void vecBoxMuller(double sigma, size_t length, double * A)
     double x1, x2;
 
     for (int i=0; i<round(length/2); i++) {
-        x1 = (double)rand() / (double)RAND_MAX;
-        x2 = (double)rand() / (double)RAND_MAX;
-        A[2*i] = sigma * sqrt(-2*log(x1)) * cos(2*M_PI*x2);
-        A[2*i+1] = sigma * sqrt(-2*log(x2)) * sin(2*M_PI*x1);
+        x1 = (double) rand() / (RAND_MAX + 1.0);
+        x2 = (double) rand() / (RAND_MAX + 1.0);
+        A[2*i] = sigma * sqrt(-2*log(1-x1)) * cos(2*M_PI*x2);
+        A[2*i+1] = sigma * sqrt(-2*log(1-x2)) * sin(2*M_PI*x1);
     }
 }
 
