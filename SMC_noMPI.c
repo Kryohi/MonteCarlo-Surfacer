@@ -212,6 +212,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             int k = (int)(n/gather_lapse);
             
             P[k] = pressure(R, L);
+            P[k] += wallsPressure(R, W, L);
             localDensity(R, L, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
@@ -222,7 +223,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         }
         
         E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
-        //E[k] += wallsEnergy(R, W, L);
+        E[n] += wallsEnergy(R, W, L);
+        
         oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
     }
     
@@ -760,7 +762,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 double pressure(const double *r, double L)  
 {
     double P = 0.0;
-    double dx, dy, dz, dr2;
+    double dx, dy, dz, dr2, dr6;
     for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
@@ -772,9 +774,35 @@ double pressure(const double *r, double L)
             dr2 = dx*dx + dy*dy + dz*dz;
             if (dr2 < L*L/4)    {
                 //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
-                P += 24.0/(dr2*dr2*dr2) - 48.0/(dr2*dr2*dr2*dr2*dr2*dr2);
+                dr6 = dr2*dr2*dr2;
+                P += 24.0/dr6 - 48.0/(dr6*dr6);
             }
-            // TODO aggiugere pareti
+        }
+    }
+    return -P/(3*L*L*L);
+}
+
+
+double wallsPressure(const double *r, const double * W, double L)
+{
+    double P = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    double dw = L/M;
+    
+    for (int m=0; m<M; m++)  
+    {
+        dx = r[3*i] - m*dw + dw/2;
+        dx = dx - L*rint(dx/L);
+        //dy = r[3*i+1];
+        //dy = dy - L*rint(dy/L);
+        dz = r[3*i+2] + L/2;
+        dz = dz - L*rint(dz/L);
+        dr2 = dx*dx + dz*dz;
+            
+        if (dr2 < L*L/4)
+        {
+            dr6 = dr2*dr2*dr2;
+            P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
         }
     }
     return -P/(3*L*L*L);
