@@ -20,11 +20,11 @@ int main(int argc, char** argv)
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 20000000;
+    int maxsteps = 10000000;
     int gather_lapse = 100;     // number of steps between each acquisition of data
-    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.03;
-    double T = 0.4;
+    double T = 0.7;
     double L = cbrt(N/rho);
     
     /* Initialize particle positions:
@@ -58,9 +58,9 @@ int main(int argc, char** argv)
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = L/20;       // average width of the wall
+    double x0m = L/20;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
     double x0sigma = 0.0;
-    double ym = 2.0;        // average bounding energy
+    double ym = 1.4;        // average bounding energy
     double ymsigma = 0.4;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
@@ -136,14 +136,13 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double *R = malloc(3*N * sizeof(double));
     memcpy(R, R0, 3*N * sizeof(double));
     double * Rn = calloc(3*N, sizeof(double)); // contains the proposed particle positions
-    double * ap = calloc(N, sizeof(double)); // solo per multi-particle moves, TODO
     double * E = calloc(maxsteps, sizeof(double));
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
     int Nv = (int) N/4; // number of cubes to divide the volume and compute the local density
-    unsigned long int * lD = calloc(Nv, sizeof(unsigned long int));
+    unsigned long * lD = calloc(Nv, sizeof(unsigned long));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
-    double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
+    //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
     // Initialize csv files
     char filename[64]; 
@@ -201,7 +200,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     /*  Actual simulation   */
     
-    printf("The expected time of execution is ~%0.1f minutes.\n", 1.05*sim_time*maxsteps/eqsteps/60);
+    printf("The expected time of execution is ~%0.1f minutes.\n", 1.03*sim_time*maxsteps/eqsteps/60);
     start = clock();
 
     for (int n=0; n<maxsteps; n++)
@@ -244,6 +243,9 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     for (int k=0; k<gather_steps; k++)
         fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
+    for (int k=0; k<Nv; k++)
+        fprintf(localdensity, "%lu\n", lD[k]);
+    
 
     // autocorrelation calculation
     fft_acf(E, maxsteps, kmax, acf);
@@ -275,8 +277,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     results.ACF = ACF;
 
     // free the allocated memory
-    free(R); free(Rn); free(E); free(P); free(jj); free(ap); free(acf);
-    int fclose(FILE *positions); int fclose(FILE *data); int fclose(FILE *autocorrelation); int fclose(FILE *localdensity);
+    free(R); free(Rn); free(E); free(P); free(jj); free(acf);
+    fclose(positions); fclose(data); fclose(autocorrelation); fclose(localdensity);
 
     return results;
 }
@@ -449,7 +451,6 @@ void initializeBox(double L, int N_, double *X)
 }
 
 
-
 /*
  Takes average and standard deviation of the distance from the y-axis (at f(x)=0) and of the maximum binding energy
  and puts in the W array two gaussian distributions of resulting parameters "a" and "b".
@@ -521,7 +522,7 @@ inline void shiftSystem2D(double *r, double L)  // probabilmente inutile
 */
 // Manca funzione analoga per contributo pareti (servirà?)
 
-void forces(const double *r, double L, double *F) 
+void forces(const double *r, double L, double *F)
 {
     double dx, dy, dz, dr2, dr8, dV;
 

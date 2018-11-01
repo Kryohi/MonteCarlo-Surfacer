@@ -67,26 +67,27 @@ end
 
 
 N = 32
-M = 16
+M = 40
 rho = 0.03
-T = 0.7
+T = 0.6
 
 parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
 dfp = DataFrame(load(string("./Data/positions", parameters)))
 dfw = DataFrame(load(string("./Data/wall", parameters)))
 dfd = DataFrame(load(string("./Data/data", parameters)))
 C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
+lD = DataFrame(load(string("./Data/localdensity", parameters)))
 
 ## Plot a configuration in 3D
-X0 = [dfp[18776, col] for col in 1:3N] # subset of columns
 #X0, a = MCs.initializeSystem(N, cbrt(320))
+X0 = [dfp[58776, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, rho=rho, T=T, reuse=false)
 gui()
 
 ## Check energy
 Plots.plot(dfd.E[1:100:end], reuse=false, legend=false)
 gui()
-plot(C_H[1][1:7000], legend=false)
+plot(C_H[1][1:10000], legend=false)
 gui()
 
 #acfsimple = acf(dfd.E, 10000)
