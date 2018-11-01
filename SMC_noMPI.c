@@ -22,9 +22,9 @@ int main(int argc, char** argv)
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 9000000;
     int gather_lapse = 60;     // number of steps between each acquisition of data
-    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 600000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.03;
-    double T = 0.9;
+    double T = 0.7;
     double L = cbrt(N/rho);
     
     /* Initialize particle positions:
@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     */
     
     double * R0 = calloc(3*N, sizeof(double));
-    char filename[64]; 
+    char filename[64];
     snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
@@ -435,6 +435,33 @@ void initializeBox(double L, int N_, double *X)
 
 
 /*
+ * Divides the volume in N voxels and computes the particle density in each voxel
+ * returns two 3N arrays, one with the vertex positions of the voxel and one with the density values
+ */
+/*
+void localDensity(const double *r, double L, double *D)    //TODO
+{
+    int Nv = (int)(cbrt(N_/4)); // number of cells per dimension
+    double a = L / Na;  // interparticle distance
+    
+    for (int n=0; n<N, n++)
+    {
+        D[3*k] = (1.0 <= r[3*n] && r[3*n] <= 42.0);
+    }
+
+    for (int i=0; i<Nv; i++)    {
+        for (int j=0; j<Nv; j++)    {
+            for (int k=0; k<Nv; k++)    {
+                int n = i*Nv*Nv + j*Nv + k; // unique number for each triplet i,j,k
+                
+            }
+        }
+    }
+    
+}*/
+
+
+/*
  Takes average and standard deviation of the distance from the y-axis (at f(x)=0) and of the maximum binding energy
  and puts in the W array two gaussian distributions of resulting parameters "a" and "b".
  These parameters enter the Lennard-Jones potential in the form V = 4*(a/r^12 - b/r^6).
@@ -552,7 +579,7 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         dx = dx - L*rint(dx/L);
         //dy = ry;
         //dy = dy - L*rint(dy/L);
-        dz = rz;    // controllare segno / casi in cui potrebbe dare risultati non voluti
+        dz = L/2 - abs(rz);    // controllare segno / casi in cui potrebbe dare risultati non voluti
         dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)
@@ -812,16 +839,6 @@ void simple_acf(const double *H, size_t length, int k_max, double * acf)
     free(Z);
 }
 
-
-/*
- * Divides the volume in N voxels and computes the particle density in each voxel
- * 
- */
-
-void localDensity()
-{
-    
-}
 
 
 /*
