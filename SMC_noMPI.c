@@ -7,7 +7,7 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
- * unica stringa per nomi dei file
+ * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
  * 
  */
 
@@ -20,11 +20,11 @@ int main(int argc, char** argv)
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 9000000;
-    int gather_lapse = 60;     // number of steps between each acquisition of data
-    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
+    int maxsteps = 20000000;
+    int gather_lapse = 100;     // number of steps between each acquisition of data
+    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.03;
-    double T = 0.9;
+    double T = 0.4;
     double L = cbrt(N/rho);
     
     /* Initialize particle positions:
@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     */
     
     double * R0 = calloc(3*N, sizeof(double));
-    char filename[64]; 
+    char filename[64];
     snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
@@ -58,10 +58,10 @@ int main(int argc, char** argv)
     double * W = calloc(2*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;       // average width of the wall
+    double x0m = L/20;       // average width of the wall
     double x0sigma = 0.0;
-    double ym = 1.2;        // average bounding energy
-    double ymsigma = 0.3;
+    double ym = 2.0;        // average bounding energy
+    double ymsigma = 0.4;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
     
@@ -119,7 +119,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double g = 0.065;
     //double A = g*T;
     //double s = sqrt(4*A*D)/g;
-    double A = 2.0e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
+    double A = 0.5e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -140,6 +140,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double * E = calloc(maxsteps, sizeof(double));
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
+    int Nv = (int) N/4; // number of cubes to divide the volume and compute the local density
+    long int * lD = calloc(Nv, sizeof(long int));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
@@ -160,6 +162,14 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         perror("error while writing on data.csv");
     
     fprintf(data, "E, P, jj\n");
+    
+    FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche come con positions
+    snprintf(filename, 64, "./Data/localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    localdensity = fopen(filename, "w");
+    if (localdensity == NULL)
+        perror("error while writing on localdensity.csv");
+    
+    fprintf(localdensity, "n\n");
     
     FILE * autocorrelation;
     snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
@@ -200,6 +210,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             int k = (int)(n/gather_lapse);
             
             P[k] = pressure(R, L);
+            localDensity(R, L, Nv, lD); // add the number of particles in each block of the volume
             
             //printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
             for (int i=0; i<3*N; i++)
@@ -265,10 +276,11 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 
     // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(ap); free(acf);
-    int fclose(FILE *positions); int fclose(FILE *data); int fclose(FILE *autocorrelation);
+    int fclose(FILE *positions); int fclose(FILE *data); int fclose(FILE *autocorrelation); int fclose(FILE *localdensity);
 
     return results;
 }
+
 
 
 /*
@@ -390,6 +402,10 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 */
 
 
+
+/* ###############    System preparation and other useful routines    ############### */
+
+
 /*
  * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
  * with the shape of a cube with L = cbrt(V)
@@ -456,6 +472,47 @@ void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ym
     
     free(X0); free(YM);
 }
+
+
+/*
+ * Put in the array A gaussian-distributed numbers around 0, with standard deviation sigma
+ * 
+*/
+
+inline void vecBoxMuller(double sigma, size_t length, double * A)
+{
+    double x1, x2;
+
+    for (int i=0; i<round(length/2); i++) {
+        x1 = (double) rand() / (RAND_MAX + 1.0);
+        x2 = (double) rand() / (RAND_MAX + 1.0);
+        A[2*i] = sigma * sqrt(-2*log(1-x1)) * cos(2*M_PI*x2);
+        A[2*i+1] = sigma * sqrt(-2*log(1-x2)) * sin(2*M_PI*x1);
+    }
+}
+
+
+
+inline void shiftSystem(double *r, double L)
+{
+    for (int j=0; j<3*N; j++)
+        r[j] = r[j] - L*rint(r[j]/L);
+}
+
+inline void shiftSystem2D(double *r, double L)  // probabilmente inutile
+{
+    for (int j=0; j<N; j++) {
+        r[3*j] = r[3*j] - L*rint(r[3*j]/L);
+        r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
+    }
+}
+
+
+
+
+
+
+/* ###############    Physical quantities of interest or needed for the system evolution    ############### */
 
 
 /*
@@ -552,13 +609,18 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         dx = dx - L*rint(dx/L);
         //dy = ry;
         //dy = dy - L*rint(dy/L);
-        dz = rz;
+        // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
+        // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
+        // se rz è negativo, dz = (rz+L/2) > 0
+        // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
+        dz = rz + L/2;
+        dz = dz - L*rint(dz/L);
         dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)
         {
             dr8 = dr2*dr2*dr2*dr2;
-            dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] /(dr8*dr2*dr2*dr2);
+            dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
             *Fx -= dV*dx;
             //*Fy -= dV*dy;
             *Fz -= dV*dz;
@@ -618,6 +680,7 @@ double energySingle(const double *r, double L, int i)
     return V*4;
 }
 
+
 /*
  * Calculate the potential energy between the particles and the wall
  * 
@@ -638,10 +701,11 @@ double wallsEnergy(const double *r, const double *W, double L)
             dx = dx - L*rint(dx/L);
             //dy = r[3*i+1];
             //dy = dy - L*rint(dy/L);
-            dz = r[3*i+2];  // + L/2 
+            dz = r[3*i+2] + L/2;
+            dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dz*dz;
         
-            if (dr2 < L*L/4)    // da togliere?
+            if (dr2 < L*L/4)
             {
                 dr6 = dr2*dr2*dr2;
                 V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
@@ -670,7 +734,8 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
         dx = dx - L*rint(dx/L);
         //dy = ry;
         //dy = dy - L*rint(dy/L);
-        dz = rz; // should be abs(rz), but it dosn't matter since only its square is used
+        dz = rz + L/2;
+        dz = dz - L*rint(dz/L);
         dr2 = dx*dx + dz*dz;
         
         if (dr2 < L*L/4)
@@ -711,37 +776,42 @@ double pressure(const double *r, double L)
 }
 
 
-inline void shiftSystem(double *r, double L)
-{
-    for (int j=0; j<3*N; j++)
-        r[j] = r[j] - L*rint(r[j]/L);
-}
-
-inline void shiftSystem2D(double *r, double L)
-{
-    for (int j=0; j<N; j++) {
-        r[3*j] = r[3*j] - L*rint(r[3*j]/L);
-        r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
-    }
-}
-
-
 /*
- * Put in the array A gaussian-distributed numbers around 0, with standard deviation sigma
- * 
-*/
+ * Divides the volume in N voxels and stores the number of particles in each voxel.
+ * returns a N/4 array containing the number of particles in each block, iterating in the z, then y, then x direction.
+ * D isn't reinitialized, so it can be used for cunulative counting.
+ */
 
-inline void vecBoxMuller(double sigma, size_t length, double * A)
+void localDensity(const double *r, double L, int Nv, long int *D)    // DA VERIFICARE
 {
-    double x1, x2;
+    double * p = malloc(3*N * sizeof(double));
+    memcpy(p, r, 3*N * sizeof(double));
+    
+    // shift the particles positions by L/2 for convenience
+    for (int j=0; j<3*N; j++)
+        p[j] = p[j] + L/2;
+    
+    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
+    if (isApproxEqual((double) Nl, cbrt(Nv)) == false)
+        perror("The number passed to localDensity() should be a perfect cube");
+    
+    int v;  // unique number for each triplet i,j,k
+    double dL = Nl / L;
+    
 
-    for (int i=0; i<round(length/2); i++) {
-        x1 = (double) rand() / (RAND_MAX + 1.0);
-        x2 = (double) rand() / (RAND_MAX + 1.0);
-        A[2*i] = sigma * sqrt(-2*log(1-x1)) * cos(2*M_PI*x2);
-        A[2*i+1] = sigma * sqrt(-2*log(1-x2)) * sin(2*M_PI*x1);
+    for (int i=0; i<Nl; i++)    {
+        for (int j=0; j<Nl; j++)    {
+            for (int k=0; k<Nl; k++)    {
+                v = i*Nv*Nv + j*Nl + k;
+                for (int n=0; n<N; n++) {
+                    D[v] += ((r[3*n]>i*dL && r[3*n]<(i+1)*dL) &&  (r[3*n+1]>j*dL && r[3*n+1]<(j+1)*dL) && (r[3*n+2]>k*dL && r[3*n+2]<(k+1)*dL));
+                }
+            }
+        }
     }
+    free(p);
 }
+
 
 
 /*
@@ -813,19 +883,12 @@ void simple_acf(const double *H, size_t length, int k_max, double * acf)
 }
 
 
-/*
- * Divides the volume in N voxels and computes the particle density in each voxel
- * 
- */
 
-void localDensity()
-{
-    
-}
+
 
 
 /*
-    Mathematics rubbish
+    Simple math
 */
 
 inline double sum(const double * A, size_t length)   
@@ -913,6 +976,14 @@ inline double variance_corr(const double * A, double tau, size_t length)
  * Misc functions
  * 
  */
+
+inline bool isApproxEqual(double a, double b)
+{
+    if (fabs(a-b) < 1e-15)
+        return true;
+    else
+        return false;
+}
 
 int * currentTime()
 {

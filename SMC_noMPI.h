@@ -17,9 +17,9 @@
 
 
 // number of slices for the potential of the walls
-#define M 16
+#define M 40
 // number of particles:
-#define N 32
+#define N 108
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
@@ -63,6 +63,7 @@ double energy(const double *r, double L);
 double wallsEnergy(const double *r, const double *W, double L);
 double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L);
 double pressure(const double *r, double L);
+void localDensity(const double *r, double L, int Nv, long int *D);
 double sum(const double *A, size_t length);
 int intsum(const int * A, size_t length);
 double mean(const double * A, size_t length);
@@ -73,6 +74,7 @@ void zeros(size_t length, double *A);
 void elforel(const double *A, const double * B, double * C, size_t length);
 void simple_acf(const double *H, size_t length, int k_max, double * acf);
 void fft_acf(const double *H, size_t length, int k_max, double * acf);
+bool isApproxEqual(double a, double b);
 int * currentTime();
 
 
