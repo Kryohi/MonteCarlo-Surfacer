@@ -20,10 +20,10 @@ int main(int argc, char** argv)
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 15000000;
-    int gather_lapse = 100;     // number of steps between each acquisition of data
+    int maxsteps = 1000000;
+    int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
     int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
-    double rho = 0.03;
+    double rho = 0.04;
     double T = 0.7;
     double L = cbrt(N/rho);
     
@@ -124,11 +124,13 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double dT = 0.065;
     //double A = D*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 0.7e-3;
+    double A = 0.8e-3;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
+    int Nv = 512; // number of cubes to divide the volume and compute the local density (shouòd be a perfect cube)
+
     
     clock_t start, end;
     double sim_time;
@@ -144,7 +146,6 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double * E = calloc(maxsteps, sizeof(double));
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
-    int Nv = (int) N/4; // number of cubes to divide the volume and compute the local density
     unsigned long * lD = calloc(Nv, sizeof(unsigned long));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
@@ -842,13 +843,12 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)    //
     int v;  // unique number for each triplet i,j,k
     double dL = Nl / L;
     
-
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
-                v = i*Nv*Nv + j*Nl + k;
+                v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    D[v] += ((r[3*n]>i*dL && r[3*n]<(i+1)*dL) &&  (r[3*n+1]>j*dL && r[3*n+1]<(j+1)*dL) && (r[3*n+2]>k*dL && r[3*n+2]<(k+1)*dL));
+                    D[v] += ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dL && p[3*n+2]<(k+1)*dL));
                 }
             }
         }

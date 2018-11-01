@@ -17,7 +17,7 @@
 
 
 // number of slices for the potential of the walls:
-#define M 5
+#define M 8
 
 // number of particles:
 #define N 32
