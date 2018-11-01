@@ -22,7 +22,7 @@ int main(int argc, char** argv)
     // In the main all the variables common to the simulations in every process are declared
     int maxsteps = 1000000;
     int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.04;
     double T = 0.7;
     double L = cbrt(N/rho);
@@ -129,7 +129,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
-    int Nv = 512; // number of cubes to divide the volume and compute the local density (shouòd be a perfect cube)
+    int Nv = 8; // number of cubes to divide the volume and compute the local density (shouòd be a perfect cube)
 
     
     clock_t start, end;
@@ -168,7 +168,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     fprintf(data, "E, P, jj\n");
     
-    FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche come con positions
+    FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche fare come con positions
     snprintf(filename, 64, "./Data/localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     localdensity = fopen(filename, "w");
     if (localdensity == NULL)
@@ -222,7 +222,6 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
                 fprintf(positions, "%0.12lf,", R[i]);
 
             fprintf(positions, "\n");
-            // aggiungere indicatore di progresso ? [fflush(stdout);]
         }
         
         E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
@@ -841,14 +840,15 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)    //
         perror("The number passed to localDensity() should be a perfect cube");
     
     int v;  // unique number for each triplet i,j,k
-    double dL = Nl / L;
+    double dL = L / Nl;
     
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    D[v] += ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dL && p[3*n+2]<(k+1)*dL));
+                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dL && p[3*n+2]<(k+1)*dL))
+                        D[v]++;
                 }
             }
         }
