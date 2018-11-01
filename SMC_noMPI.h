@@ -16,8 +16,9 @@
 // + usare argp?
 
 
-// number of slices for the potential of the walls
-#define M 40
+// number of slices for the potential of the walls:
+#define M 5
+
 // number of particles:
 #define N 32
 

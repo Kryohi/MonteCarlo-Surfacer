@@ -27,6 +27,34 @@ int main(int argc, char** argv)
     double T = 0.7;
     double L = cbrt(N/rho);
     
+    
+    /* Initialize Walls:
+    */
+    
+    // parameters a and b for every piece of the wall
+    double * W = calloc(2*M, sizeof(double));
+    
+    // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
+    double x0m = L/20;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
+    double x0sigma = 0.0;
+    double ym = 1.4;        // average bounding energy
+    double ymsigma = 0.4;
+    
+    initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
+    
+    // save the wall potentials to a csv file 
+    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    FILE * wall;
+    wall = fopen(filename, "w");
+    if (wall == NULL)
+        perror("error while writing on wall.csv");
+    
+    fprintf(wall, "c,d\n");
+    for (int m=0; m<M; m++)
+        fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
+    
+    
+    
     /* Initialize particle positions:
        if a previous simulation was run with the same N, M, rho and T parameters,
        the last position configuration of that system is picked as a starting configuration.
@@ -50,31 +78,6 @@ int main(int argc, char** argv)
         printf("\nInitializing system...\n");
         initializeBox(L, N, R0); // da sostituire con cavity?
     }
-    
-    
-    /* Initialize Walls */
-    
-    // parameters a and b for every piece of the wall
-    double * W = calloc(2*M, sizeof(double));
-    
-    // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = L/20;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
-    double x0sigma = 0.0;
-    double ym = 1.4;        // average bounding energy
-    double ymsigma = 0.4;
-    
-    initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
-    
-    // save the wall potentials to a csv file 
-    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
-    FILE * wall;
-    wall = fopen(filename, "w");
-    if (wall == NULL)
-        perror("error while writing on wall.csv");
-    
-    fprintf(wall, "c,d\n");
-    for (int m=0; m<M; m++)
-        fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
     
     
     
@@ -116,8 +119,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     // System properties
     double L = cbrt(N/rho);
     //double D = 2e-3;
-    //double g = 0.065;
-    //double A = g*T;
+    //double dT = 0.065;
+    //double A = D*dT;
     //double s = sqrt(4*A*D)/g;
     double A = 0.5e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
     
@@ -211,7 +214,6 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
             P[k] = pressure(R, L);
             localDensity(R, L, Nv, lD); // add the number of particles in each block of the volume
             
-            //printf("%f\t%f\t%f\n", E[k], P[k], (float)jj[k]/N);
             for (int i=0; i<3*N; i++)
                 fprintf(positions, "%0.12lf,", R[i]);
 
@@ -417,8 +419,8 @@ void initializeBox(double L, int N_, double *X)
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
     double a = L / Na;  // interparticle distance
-    //if (Na != cbrt(N_/4)) //TODO
-        //perror("Can't make a cubic FCC crystal with this N :(");
+    if ( !isApproxEqual((double) Na, cbrt(N_/4)) )
+        perror("Can't make a cubic FCC crystal with this N :(");
 
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
@@ -750,7 +752,8 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 
 
 /*
- * Calculate ONLY the pressure due to the virial contribution
+ * Calculates ONLY the pressure due to the virial contribution,
+ * but from both particle-particle and wall-particle interactions.
  * 
 */
 
@@ -771,6 +774,7 @@ double pressure(const double *r, double L)
                 //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
                 P += 24.0/(dr2*dr2*dr2) - 48.0/(dr2*dr2*dr2*dr2*dr2*dr2);
             }
+            // TODO aggiugere pareti
         }
     }
     return -P/(3*L*L*L);
@@ -793,7 +797,7 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)    //
         p[j] = p[j] + L/2;
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
-    if (isApproxEqual((double) Nl, cbrt(Nv)) == false)
+    if ( !isApproxEqual((double) Nl, cbrt(Nv) )
         perror("The number passed to localDensity() should be a perfect cube");
     
     int v;  // unique number for each triplet i,j,k
