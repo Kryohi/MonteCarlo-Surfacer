@@ -20,7 +20,7 @@ int main(int argc, char** argv)
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 10000000;
+    int maxsteps = 15000000;
     int gather_lapse = 100;     // number of steps between each acquisition of data
     int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
     double rho = 0.03;
@@ -37,12 +37,14 @@ int main(int argc, char** argv)
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = L/20;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
     double x0sigma = 0.0;
-    double ym = 1.4;        // average bounding energy
+    double ym = 1.7;        // average bounding energy
     double ymsigma = 0.4;
     
     initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
     
     // save the wall potentials to a csv file 
+    char filename[64];
+    
     snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE * wall;
     wall = fopen(filename, "w");
@@ -61,7 +63,7 @@ int main(int argc, char** argv)
     */
     
     double * R0 = calloc(3*N, sizeof(double));
-    char filename[64];
+   
     snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
@@ -121,8 +123,8 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //double D = 2e-3;
     //double dT = 0.065;
     //double A = D*dT;
-    //double s = sqrt(4*A*D)/g;
-    double A = 0.5e-3;  // circa 4e-5 per rho=0.03, T=0.5;  circa 2.3e-3 per rho=0.03, T=0.9
+    //double s = sqrt(4*A*D)/dT;
+    double A = 0.7e-3;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -668,9 +670,11 @@ double energy(const double *r, double L)
 double energySingle(const double *r, double L, int i)
 {
     double V = 0.0;
-    double dx, dy, dz, dr2;
-    for (int l=0; l<N; l++)  {
-        if (l != i)   {
+    double dx, dy, dz, dr2, dr6;
+    for (int l=0; l<N; l++)  
+    {
+        if (l != i)   
+        {
             dx = r[3*l] - r[3*i];
             dx = dx - L*rint(dx/L);
             dy = r[3*l+1] - r[3*i+1];
@@ -678,8 +682,12 @@ double energySingle(const double *r, double L, int i)
             dz = r[3*l+2] - r[3*i+2];
             dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dy*dy + dz*dz;
+            
             if (dr2 < L*L/4)
-                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
+            {
+                dr6 = dr2*dr2*dr2;
+                V += 1.0/(dr6*dr6) - 1.0/dr6;
+            }
         }
     }
     return V*4;
@@ -791,18 +799,21 @@ double wallsPressure(const double *r, const double * W, double L)
     
     for (int m=0; m<M; m++)  
     {
-        dx = r[3*i] - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        //dy = r[3*i+1];
-        //dy = dy - L*rint(dy/L);
-        dz = r[3*i+2] + L/2;
-        dz = dz - L*rint(dz/L);
-        dr2 = dx*dx + dz*dz;
-            
-        if (dr2 < L*L/4)
+        for (int i=0; i<N; i++)  
         {
-            dr6 = dr2*dr2*dr2;
-            P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+            dx = r[3*i] - m*dw + dw/2;
+            dx = dx - L*rint(dx/L);
+            //dy = r[3*i+1];
+            //dy = dy - L*rint(dy/L);
+            dz = r[3*i+2] + L/2;
+            dz = dz - L*rint(dz/L);
+            dr2 = dx*dx + dz*dz;
+            
+            if (dr2 < L*L/4)
+            {
+                dr6 = dr2*dr2*dr2;
+                P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+            }
         }
     }
     return -P/(3*L*L*L);
@@ -825,7 +836,7 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)    //
         p[j] = p[j] + L/2;
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
-    if ( !isApproxEqual((double) Nl, cbrt(Nv) )
+    if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
         perror("The number passed to localDensity() should be a perfect cube");
     
     int v;  // unique number for each triplet i,j,k
