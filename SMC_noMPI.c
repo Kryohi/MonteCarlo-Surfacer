@@ -141,7 +141,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double * P = calloc(gather_steps, sizeof(double));
     int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
     int Nv = (int) N/4; // number of cubes to divide the volume and compute the local density
-    long int * lD = calloc(Nv, sizeof(long int));
+    unsigned long int * lD = calloc(Nv, sizeof(unsigned long int));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
@@ -782,7 +782,7 @@ double pressure(const double *r, double L)
  * D isn't reinitialized, so it can be used for cunulative counting.
  */
 
-void localDensity(const double *r, double L, int Nv, long int *D)    // DA VERIFICARE
+void localDensity(const double *r, double L, int Nv, unsigned long int *D)    // DA VERIFICARE
 {
     double * p = malloc(3*N * sizeof(double));
     memcpy(p, r, 3*N * sizeof(double));
@@ -803,7 +803,7 @@ void localDensity(const double *r, double L, int Nv, long int *D)    // DA VERIF
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 v = i*Nv*Nv + j*Nl + k;
-                for (int n=0; n<N; n++) {
+                for (int n=0; n<N; n++)        {
                     D[v] += ((r[3*n]>i*dL && r[3*n]<(i+1)*dL) &&  (r[3*n+1]>j*dL && r[3*n+1]<(j+1)*dL) && (r[3*n+2]>k*dL && r[3*n+2]<(k+1)*dL));
                 }
             }
