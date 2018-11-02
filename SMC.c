@@ -93,7 +93,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     start = clock();
     for (int n=0; n<eqsteps; n++)
     {
-        E[n] = energy(R, L, Lz);
+        E[n] = energy(R, L);
         oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
     }
     end = clock();
@@ -127,7 +127,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
             fprintf(positions, "\n");
         }
         
-        E[n] = energy(R, L, Lz);  // da calcolare in modo più intelligente dentro oneParticleMoves
+        E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
         E[n] += wallsEnergy(R, W, L, Lz);
         
         oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
@@ -230,7 +230,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L, Lz);
         
         // same thing for the force exerted on particle n
-        force(R, L, n, &Fmx, &Fmy, &Fmz);
+        forceSingle(R, L, n, &Fmx, &Fmy, &Fmz);
         wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, Lz, &Fmx, &Fmy, &Fmz);
 
         // calculate the proposed new position of particle n
@@ -246,7 +246,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
         Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, Lz);
-        force(Rn, L, n, &Fnx, &Fny, &Fnz);
+        forceSingle(Rn, L, n, &Fnx, &Fny, &Fnz);
         wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, Lz, &Fnx, &Fny, &Fnz);
 
 
@@ -363,7 +363,7 @@ void initializeBox(double L, double Lz, int N_, double *X)
     for (int n=0; n<3*N; n++)
         X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
 
-    shiftSystem(X,L,Lz);
+    shiftSystem3D(X,L,Lz);
 }
 
 
@@ -448,6 +448,134 @@ inline void shiftSystem2D(double *r, double L)
 
 
 /*
+ * Calculate the potential energy of particle i with respect to other particles
+ * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4
+*/
+
+double energySingle(const double *r, double L, int i)
+{
+    double V = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    for (int l=0; l<N; l++)  
+    {
+        if (l != i)   
+        {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L);
+            dr2 = dx*dx + dy*dy + dz*dz;
+            
+            if (dr2 < L*L/4)
+            {
+                dr6 = dr2*dr2*dr2;
+                V += 1.0/(dr6*dr6) - 1.0/dr6;
+            }
+        }
+    }
+    return V*4;
+}
+
+
+/*
+ * Calculate the forces acting on particle i due to the interaction with other particles
+ * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
+*/
+
+void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
+{
+    double dx, dy, dz, dr2, dr8, dV;
+    *Fx = 0.0;
+    *Fy = 0.0;
+    *Fz = 0.0;
+
+    for (int l=0; l<N; l++)  
+    {
+         if (l != i)   
+         {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - Lz*rint(dz/Lz); // le particelle oltre la parete vanno sentite?
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)
+            {
+                dr8 = dr2*dr2*dr2*dr2;
+                dV = 24.0/dr8 - 48.0/(dr8*dr2*dr2*dr2);
+                *Fx -= dV*dx;
+                *Fy -= dV*dy;
+                *Fz -= dV*dz;
+            }
+        }
+    }
+}
+
+
+
+
+/*
+ * Calculates ONLY the pressure due to the virial contribution,
+ * but from both particle-particle and wall-particle interactions.
+ * 
+*/
+
+double pressure(const double *r, double L, double Lz)  
+{
+    double P = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    for (int l=1; l<N; l++)  {
+        for (int i=0; i<l; i++)   {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L);
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)    
+            {
+                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
+                dr6 = dr2*dr2*dr2;
+                P += 24.0/dr6 - 48.0/(dr6*dr6);
+            }
+        }
+    }
+    return -P/(3*L*L*Lz);
+}
+
+
+
+/*
+ * Calculate the interparticle potential energy of the system
+*/
+
+double energy(const double *r, double L)  
+{
+    double V = 0.0;
+    double dx, dy, dz, dr2;
+    for (int l=1; l<N; l++)  {
+        for (int i=0; i<l; i++)   {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)
+                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
+        }
+    }
+    return V*4;
+}
+
+
+
+/*
  * Calculate the 3N array of forces acting on each particles due to the interaction with other particles
  * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
 */
@@ -485,39 +613,35 @@ void forces(const double *r, double L, double *F)
 }
 
 
+
 /*
- * Calculate the forces acting on particle i due to the interaction with other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
+ * Calculate the potential energy between one particle and the wall
+ * 
 */
 
-void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
+double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L, double Lz)
 {
-    double dx, dy, dz, dr2, dr8, dV;
-    *Fx = 0.0;
-    *Fy = 0.0;
-    *Fz = 0.0;
-
-    for (int l=0; l<N; l++)  
+    double V = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    double dw = L/M;
+    
+    for (int m=0; m<M; m++)  
     {
-         if (l != i)   
-         {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
-            {
-                dr8 = dr2*dr2*dr2*dr2;
-                dV = 24.0/dr8 - 48.0/(dr8*dr2*dr2*dr2);
-                *Fx -= dV*dx;
-                *Fy -= dV*dy;
-                *Fz -= dV*dz;
-            }
+        dx = rx - m*dw + dw/2;
+        dx = dx - L*rint(dx/L);
+        dy = ry;
+        dy = dy - L*rint(dy/L);
+        dz = rz + Lz/2;
+        dz = dz - Lz*rint(dz/Lz);
+        dr2 = dx*dx + dy*dy + dz*dz;
+        
+        if (dr2 < L*L/4)
+        {
+            dr6 = dr2*dr2*dr2;
+            V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
         }
     }
+    return V*4;
 }
 
 
@@ -560,63 +684,6 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
 }
 
 
-/*
- * Calculate the interparticle potential energy of the system
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
-*/
-
-double energy(const double *r, double L)  
-{
-    double V = 0.0;
-    double dx, dy, dz, dr2;
-    for (int l=1; l<N; l++)  {
-        for (int i=0; i<l; i++)   {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
-                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
-        }
-    }
-    return V*4;
-}
-
-
-/*
- * Calculate the potential energy of particle i with respect to other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4
-*/
-
-double energySingle(const double *r, double L, int i)
-{
-    double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    for (int l=0; l<N; l++)  
-    {
-        if (l != i)   
-        {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            //dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dy*dy + dz*dz;
-            
-            if (dr2 < L*L/4)
-            {
-                dr6 = dr2*dr2*dr2;
-                V += 1.0/(dr6*dr6) - 1.0/dr6;
-            }
-        }
-    }
-    return V*4;
-}
-
 
 /*
  * Calculate the potential energy between the particles and the wall
@@ -652,67 +719,6 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
 }
 
 
-/*
- * Calculate the potential energy between one particle and the wall
- * 
-*/
-
-double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L, double Lz)
-{
-    double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    double dw = L/M;
-    
-    for (int m=0; m<M; m++)  
-    {
-        dx = rx - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        dy = ry;
-        dy = dy - L*rint(dy/L);
-        dz = rz + Lz/2;
-        dz = dz - Lz*rint(dz/Lz);
-        dr2 = dx*dx + dy*dy + dz*dz;
-        
-        if (dr2 < L*L/4)
-        {
-            dr6 = dr2*dr2*dr2;
-            V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
-        }
-    }
-    return V*4;
-}
-
-
-/*
- * Calculates ONLY the pressure due to the virial contribution,
- * but from both particle-particle and wall-particle interactions.
- * 
-*/
-
-double pressure(const double *r, double L, double Lz)  
-{
-    double P = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    for (int l=1; l<N; l++)  {
-        for (int i=0; i<l; i++)   {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            //dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)    {
-                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
-                dr6 = dr2*dr2*dr2;
-                P += 24.0/dr6 - 48.0/(dr6*dr6);
-            }
-        }
-    }
-    return -P/(3*L*L*Lz);
-}
-
-
 double wallsPressure(const double *r, const double * W, double L, double Lz)
 {
     double P = 0.0;
@@ -726,9 +732,9 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
             dx = r[3*i] - m*dw + dw/2;
             dx = dx - L*rint(dx/L);
             //dy = r[3*i+1];
-            //dy = dy - L*rint(dy/L);
+            dy = dy - L*rint(dy/L);
             dz = r[3*i+2] + L/2;
-            dz = dz - L*rint(dz/L);
+            dz = dz - Lz*rint(dz/Lz);
             dr2 = dx*dx + dz*dz;
             
             if (dr2 < L*L/4)
@@ -742,10 +748,12 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
 }
 
 
+
+
 /*
  * Divides the volume in N voxels and stores the number of particles in each voxel.
  * returns a N/4 array containing the number of particles in each block, iterating in the z, then y, then x direction.
- * D isn't reinitialized, so it can be used for cunulative counting.
+ * D isn't reinitialized, so it can be used for cumulative counting.
  */
 
 void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D)
@@ -763,13 +771,14 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
+    double dLz = Lz / Nl;
     
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dL && p[3*n+2]<(k+1)*dL))
+                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
                         D[v]++;
                 }
             }

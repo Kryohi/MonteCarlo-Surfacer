@@ -10,9 +10,9 @@ int main(int argc, char** argv)
     int maxsteps = 8000000;
     int gather_lapse = (int) maxsteps/100000;     // number of steps between each acquisition of data
     int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
-    double Lx = 16;
+    double L = 16;
     double Lz = 28;
-    double rho = N / (Lx*Lx*Lz);
+    double rho = N / (L*L*Lz);
     double T = 0.7;
     
     // creates data folder and common filename suffix to save
@@ -70,7 +70,7 @@ int main(int argc, char** argv)
     
     } else {
         printf("\nInitializing system...\n");
-        initializeBox(Lx, Lz, N, R0); // da sostituire con cavity?
+        initializeBox(L, Lz, N, R0); // da sostituire con cavity?
     }
     
     
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
         
     struct Sim MC1;
     
-    MC1 = sMC(rho, T, W, R0, maxsteps, gather_lapse, eqsteps);
+    MC1 = sMC(L, Lz, T, W, R0, maxsteps, gather_lapse, eqsteps);
     
     
     printf("\n###  Final results  ###");
