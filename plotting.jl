@@ -1,6 +1,7 @@
-using Statistics, CSVFiles, DataFrames, Printf, Plots, ProgressMeter, FFTW
+using Statistics, CSVFiles, DataFrames, Printf, PyCall, Plots, ProgressMeter, FFTW
+pygui(:qt); import PyPlot: pygui; PyPlot.pygui(true)
 pyplot()
-plotlyjs(size=(800,600))
+#plotlyjs(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 #run(`./smc`)
@@ -10,11 +11,11 @@ function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
     #Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
-        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue,Plots.stroke(0)),
+        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue,Plots.stroke(0)),
          w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
         L = cbrt(N/rho)
-        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue, Plots.stroke(0)),
+        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
          w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
     end
 end
@@ -80,16 +81,18 @@ C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
 lD = DataFrame(load(string("./Data/localdensity", parameters)))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
+lD[:n] = lD[:n] / length(dfd.E)
+
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-X0 = [dfp[108776, col] for col in 1:3N] # subset of columns
+X0 = [dfp[148776, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, rho=rho, T=T, reuse=false)
 gui()
 
 ## Check energy
 Plots.plot(dfd.E[1:100:end], reuse=false, legend=false)
 gui()
-plot(C_H[1][1:20000], legend=false)
+plot(C_H[1][1:25000], legend=false)
 gui()
 
 #acfsimple = acf(dfd.E, 10000)
