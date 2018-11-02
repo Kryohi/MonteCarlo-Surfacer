@@ -2,10 +2,9 @@
 /* TODO
  * 
  * Unire calcolo energia e forze interparticellari e con parete?
- * Aggiungere contributo parete a pressione
  * chiedere a utente parametri simulazione
  * deltaX gaussiano sferico o in ogni direzione?
- * decidere cosa mettere come macro e cosa come variabie passata a simulation (tipo gather_lapse)
+ * decidere cosa mettere come macro e cosa come variabile passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
  * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
  * 
@@ -20,11 +19,11 @@ int main(int argc, char** argv)
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
 
     // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 1000000;
+    int maxsteps = 10000000;
     int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 500000;       // number of steps for the equilibrium pre-simulation
-    double rho = 0.04;
-    double T = 0.7;
+    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
+    double rho = 0.03;
+    double T = 0.8;
     double L = cbrt(N/rho);
     
     
@@ -120,23 +119,23 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
 {
     // System properties
     double L = cbrt(N/rho);
-    //double D = 2e-3;
-    //double dT = 0.065;
+    //double D = 0.5;
+    //double dT = 2e-3;
     //double A = D*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 0.8e-3;
+    double A = 1e-3;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
-    int Nv = 8; // number of cubes to divide the volume and compute the local density (shouòd be a perfect cube)
+    int Nv = 512; // number of cubes to divide the volume and compute the local density (should be a perfect cube)
 
     
     clock_t start, end;
     double sim_time;
     srand(time(NULL));  // metterne uno per processo MPI
     
-    printf("Starting new run with %d particles, T = %0.2f, rho = %0.2f, A = %0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, T=%0.2f, rho=%0.2f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -174,7 +173,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     if (localdensity == NULL)
         perror("error while writing on localdensity.csv");
     
-    fprintf(localdensity, "n\n");
+    fprintf(localdensity, "x, y, z, n\n");
     
     FILE * autocorrelation;
     snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
@@ -247,10 +246,17 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9f,%0.9f,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+        fprintf(data, "%0.9lf,%0.9lf,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
-    for (int k=0; k<Nv; k++)
-        fprintf(localdensity, "%lu\n", lD[k]);
+    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
+    for (int i=0; i<Nl; i++)    {
+        for (int j=0; j<Nl; j++)    {
+            for (int k=0; k<Nl; k++)    {
+                int v = i*Nl*Nl + j*Nl + k;
+                fprintf(localdensity, "%d, %d, %d, %lu\n", i, j, k, lD[v]);
+            }
+        }
+    }
     
 
     // autocorrelation calculation
@@ -260,7 +266,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     //printf("TauSimple: %f \n", tau);
     
     for (int m=0; m<kmax; m++)
-      fprintf(autocorrelation, "%0.6f\n", acf[m]);
+      fprintf(autocorrelation, "%0.6lf\n", acf[m]);
     
 
     // Create struct of the mean values and deviations to return
@@ -283,7 +289,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     results.ACF = ACF;
 
     // free the allocated memory
-    free(R); free(Rn); free(E); free(P); free(jj); free(acf);
+    free(R); free(Rn); free(E); free(P); free(jj); free(acf); free(lD);
     fclose(positions); fclose(data); fclose(autocorrelation); fclose(localdensity);
 
     return results;
@@ -826,7 +832,7 @@ double wallsPressure(const double *r, const double * W, double L)
  * D isn't reinitialized, so it can be used for cunulative counting.
  */
 
-void localDensity(const double *r, double L, int Nv, unsigned long int *D)    // DA VERIFICARE
+void localDensity(const double *r, double L, int Nv, unsigned long int *D)
 {
     double * p = malloc(3*N * sizeof(double));
     memcpy(p, r, 3*N * sizeof(double));
@@ -865,16 +871,18 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)    //
 
 void fft_acf(const double *H, size_t length, int k_max, double * acf)   
 {
-    if (length < k_max*2)
+    if (length < k_max*2+1) {
         perror("error: number of datapoints too low to calculate autocorrelation");
-
+        //return;
+    }
+    
     fftw_plan p;
     fftw_complex *fvi, *C_H, *temp;
     int lfft = (int)(length/2)+1;
     double * Z = fftw_malloc(length * sizeof(double));
-    fvi = (fftw_complex *) fftw_malloc(lfft * sizeof(fftw_complex));
-    temp = (fftw_complex *) fftw_malloc(lfft * sizeof(fftw_complex));
-    C_H = (fftw_complex *) fftw_malloc(lfft * sizeof(fftw_complex));
+    fvi = fftw_malloc(lfft * sizeof(fftw_complex));
+    temp = fftw_malloc(lfft * sizeof(fftw_complex));
+    C_H = fftw_malloc(lfft * sizeof(fftw_complex));
     
     double meanH = mean(H, length);
     for (int i=0; i<length; i++)

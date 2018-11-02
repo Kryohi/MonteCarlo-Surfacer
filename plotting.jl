@@ -1,6 +1,6 @@
 using Statistics, CSVFiles, DataFrames, Printf, Plots, ProgressMeter, FFTW
-#plotly(size=(800,600))
 pyplot()
+plotlyjs(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 #run(`./smc`)
@@ -10,11 +10,12 @@ function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
     #Plots.default(size=(800,600))
     N = Int(length(A)/3)
     if rho == -1.0
-        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue,Plots.stroke(0)),
-         xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
+        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue,Plots.stroke(0)),
+         w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
         L = cbrt(N/rho)
-        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)), xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
+        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(3,0.7,:blue, Plots.stroke(0)),
+         w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
     end
 end
 
@@ -66,10 +67,10 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
 end
 
 
-N = 32
+N = 108
 M = 8
-rho = 0.03
-T = 0.7
+rho = 0.04
+T = 0.8
 
 parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
 dfp = DataFrame(load(string("./Data/positions", parameters)))
@@ -77,10 +78,11 @@ dfw = DataFrame(load(string("./Data/wall", parameters)))
 dfd = DataFrame(load(string("./Data/data", parameters)))
 C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
 lD = DataFrame(load(string("./Data/localdensity", parameters)))
+sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-X0 = [dfp[78776, col] for col in 1:3N] # subset of columns
+X0 = [dfp[108776, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, rho=rho, T=T, reuse=false)
 gui()
 
