@@ -4,19 +4,35 @@
 #include "SMC.c"
 
 
+// number of gridpoints for the potential of the walls, along one dimension (M^2 total):
+#define M 3
+
+// number of particles:
+#define N 108
+
+/* NON USATI
+// Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
+#define MAXSTEPS 1000000
+// frequency of acquisition and storage of thermodinamic variables
+#define MEASUREMENT_PERIOD 100 */
+
+#define rank 0
+
+
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 5000000;
-    int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
+    int maxsteps = 18000000;
+    int gather_lapse = (int) maxsteps/180000;     // number of steps between each acquisition of data
+    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
     double L, Lz;
+    // oppure fissare densità e rapporto Lz/L ?
     #if N==32
-        L = 16;
-        Lz = 28;
+        L = 30; // 16, 28
+        Lz = 70;
     #else
-        L = 23;
-        Lz = 42;
+        L = 60;
+        Lz = 100;
     #endif
 
     double rho = N / (L*L*Lz);
@@ -30,6 +46,7 @@ int main(int argc, char** argv)
     make_directory(filename);
     chdir(filename);
     
+    
     int *now = currentTime();
     printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
     
@@ -41,7 +58,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 0.7;       // average width of the wall (distance at which the potential is 0)
+    double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
     double ym = 1.8;        // average bounding energy
     double ymsigma = 0.3;

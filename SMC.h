@@ -19,18 +19,6 @@
 // + usare argp?
 
 
-// number of gridpoints for the potential of the walls, along one dimension (M^2 total):
-#define M 3
-
-// number of particles:
-#define N 108
-
-/* NON USATI
-// Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
-#define MAXSTEPS 1000000
-// frequency of acquisition and storage of thermodinamic variables
-#define MEASUREMENT_PERIOD 100 */
-
 
 typedef struct DoubleArray { 
     size_t length;

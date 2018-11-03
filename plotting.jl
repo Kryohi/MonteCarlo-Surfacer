@@ -88,15 +88,15 @@ end
 
 N = 32
 M = 3
-L = 16
-Lz = 28
+L = 30
+Lz = 70
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.7
+T = 1.0
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
-#cd(string("./Data/data", parameters))
+cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
 
-dfp = DataFrame(load(string("./positions", parameters, ".csv")))
+#dfp = DataFrame(load(string("./positions", parameters, ".csv")))
 dfw = DataFrame(load(string("./wall", parameters, ".csv")))
 dfd = DataFrame(load(string("./data", parameters, ".csv")))
 C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
@@ -115,12 +115,22 @@ for i = 0:nd-1
     end
 end
 
-heatmap(LD_impilata)
+heatmap(LD_impilata, reuse=false)
+gui()
 
+nw = M
+wall = zeros(nw,nw)
+for i = 0:nw-1
+    for j = 0:nw-1
+        wall[i+1, j+1] = dfw.ymin[findfirst( (dfw.nx .== i) .& (dfw.ny .== j) )]
+    end
+end
+
+heatmap(wall, reuse=false)
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-X0 = [dfp[88777, col] for col in 1:3N] # subset of columns
+X0 = [dfp[1, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, L=L, Lz=Lz, T=T, reuse=false)
 
 make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T, reuse=false)
