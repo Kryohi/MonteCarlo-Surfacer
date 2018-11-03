@@ -24,7 +24,7 @@
 #define M 3
 
 // number of particles:
-#define N 32
+#define N 108
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
