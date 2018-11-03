@@ -7,135 +7,40 @@
  * decidere cosa mettere come macro e cosa come variabile passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
  * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
+ * fare grafico di local density in funzione di E legame
+ * mettere tutte le funzioni fuori dal main in file separato accessibile anche da SMC_MPI
+ * passare anche rank processo e metterlo in tutti i printf
+ * in generale fare in modo che noMPI venga trattato come se avesse rank 0
+ * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
+ * vedere se si può semplificare calcolo distanze da pareti
  * 
  */
 
-#include "SMC_noMPI.h"
+
+#include "SMC.h"
 
 
-int main(int argc, char** argv)
-{
-    int *now = currentTime();
-    printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
-
-    // In the main all the variables common to the simulations in every process are declared
-    int maxsteps = 10000000;
-    int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
-    double rho = 0.03;
-    double T = 0.8;
-    double L = cbrt(N/rho);
-    
-    
-    /* Initialize Walls:
-    */
-    
-    // parameters a and b for every piece of the wall
-    double * W = calloc(2*M, sizeof(double));
-    
-    // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = L/20;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
-    double x0sigma = 0.0;
-    double ym = 1.7;        // average bounding energy
-    double ymsigma = 0.4;
-    
-    initializeWalls(L, x0m, x0sigma, ym, ymsigma, W);
-    
-    // save the wall potentials to a csv file 
-    char filename[64];
-    
-    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
-    FILE * wall;
-    wall = fopen(filename, "w");
-    if (wall == NULL)
-        perror("error while writing on wall.csv");
-    
-    fprintf(wall, "c,d\n");
-    for (int m=0; m<M; m++)
-        fprintf(wall, "%f,%f\n", W[2*m], W[2*m+1]);
-    
-    
-    
-    /* Initialize particle positions:
-       if a previous simulation was run with the same N, M, rho and T parameters,
-       the last position configuration of that system is picked as a starting configuration.
-    */
-    
-    double * R0 = calloc(3*N, sizeof(double));
-   
-    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
-    
-    if (access( filename, F_OK ) != -1) 
-    {
-        printf("\nUsing previously saved particle configuration...\n");
-        FILE * last_state;
-        last_state = fopen(filename, "r");  // o cercare ultima riga di positions con fseek?
-        for (int i=0; i<3*N; i++)
-            fscanf(last_state, "%lf,", &R0[i]);
-        
-        fclose(last_state);
-    
-    } else {
-        printf("\nInitializing system...\n");
-        initializeBox(L, N, R0); // da sostituire con cavity?
-    }
-    
-    
-    
-    /* Prepare the results and start the simulation(s) */
-        
-    struct Sim MC1;
-    
-    MC1 = sMC(rho, T, W, R0, maxsteps, gather_lapse, eqsteps);
-    
-    
-    printf("\n###  Final results  ###");
-    printf("\nMean energy: %f ± %f", MC1.E, MC1.dE);
-    printf("\nMean pressure: %f ± %f", MC1.P, MC1.dP);
-    printf("\nApproximate heat capacity: %f", MC1.cv);
-    printf("\nAverage autocorrelation time: %f", MC1.tau);
-    printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
-    printf("\n");
-    
-    
-    // save the last position of every particle, to use in a later run
-    FILE * last_state;
-    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
-    last_state = fopen(filename, "w");
-    if (last_state == NULL)
-        perror("error while writing on last_state.csv");
-    
-    for (int i=0; i<3*N; i++)
-        fprintf(last_state, "%0.12f,", MC1.Rfinal[i]);
-    
-    fclose(last_state); fclose(wall);
-    free(R0); free(W);
-    
-    return 0;
-}
-
-
-struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
+struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
 {
     // System properties
-    double L = cbrt(N/rho);
-    //double D = 0.5;
+    double rho = N / (L*L*Lz);
+    //double gamma = 0.5;
     //double dT = 2e-3;
-    //double A = D*dT;
+    //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 1e-3;
+    double A = 2e-3;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
-    int Nv = 512; // number of cubes to divide the volume and compute the local density (should be a perfect cube)
+    int Nv = 30*30*30; // number of cubes to divide the volume and compute the local density (should be a perfect cube)
 
     
     clock_t start, end;
     double sim_time;
-    srand(time(NULL));  // metterne uno per processo MPI
+    srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.2f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -149,6 +54,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
+    
     // Initialize csv files
     char filename[64]; 
     snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
@@ -190,7 +96,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
     for (int n=0; n<eqsteps; n++)
     {
         E[n] = energy(R, L);
-        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
     }
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
@@ -213,9 +119,9 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
             
-            P[k] = pressure(R, L);
-            P[k] += wallsPressure(R, W, L);
-            localDensity(R, L, Nv, lD); // add the number of particles in each block of the volume
+            P[k] = pressure(R, L, Lz);
+            P[k] += wallsPressure(R, W, L, Lz);
+            localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
                 fprintf(positions, "%0.12lf,", R[i]);
@@ -224,9 +130,9 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
         }
         
         E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
-        E[n] += wallsEnergy(R, W, L);
+        E[n] += wallsEnergy(R, W, L, Lz);
         
-        oneParticleMoves(R, Rn, W, L, A, T, &jj[n]);
+        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
     }
     
     end = clock();
@@ -304,7 +210,7 @@ struct Sim sMC(double rho, double T, const double *W, const double *R0, int maxs
  * 
 */
 
-void oneParticleMoves(double * R, double * Rn, const double * W, double L, double A, double T, int * j)
+void oneParticleMoves(double * R, double * Rn, const double * W, double L, double Lz, double A, double T, int * j)
 {
     double * displ = malloc(3*N * sizeof(double));
     double Um, Un, deltaX, deltaY, deltaZ, Fmx, Fmy, Fmz, Fnx, Fny, Fnz, deltaW, ap;
@@ -323,11 +229,11 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
-        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L);
+        Um += wallsEnergySingle(R[3*n], R[3*n+1], R[3*n+2], W, L, Lz);
         
         // same thing for the force exerted on particle n
-        force(R, L, n, &Fmx, &Fmy, &Fmz);
-        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, &Fmx, &Fmy, &Fmz);
+        forceSingle(R, L, n, &Fmx, &Fmy, &Fmz);
+        wallsForce(R[3*n], R[3*n+1], R[3*n+2], W, L, Lz, &Fmx, &Fmy, &Fmz);
 
         // calculate the proposed new position of particle n
         deltaX = Fmx*A/T + displ[3*n];
@@ -336,16 +242,15 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         Rn[3*n] = R[3*n] + deltaX;
         Rn[3*n+1] = R[3*n+1] + deltaY;
         Rn[3*n+2] = R[3*n+2] + deltaZ;
+        
+        shiftSystem3D(Rn, L, Lz);   // verificare che vada bene qui, e che vada messo il 2D e non il 3D
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
-        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L);
+        Un += wallsEnergySingle(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, Lz);
+        forceSingle(Rn, L, n, &Fnx, &Fny, &Fnz);
+        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, Lz, &Fnx, &Fny, &Fnz);
 
-        force(Rn, L, n, &Fnx, &Fny, &Fnz);
-        wallsForce(Rn[3*n], Rn[3*n+1], Rn[3*n+2], W, L, &Fnx, &Fny, &Fnz);
-        //printf("%f\n", Fnx);
-
-        shiftSystem(Rn,L);   // forse andrebbe messo da un'altra parte
 
         // Calculate the acceptance probability for the single-particle move
         
@@ -373,6 +278,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
     free(displ);
 }
+
 
 /*
  * Old SMC step, doesn't work ¯\_(ツ)_/¯
@@ -423,12 +329,13 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 /*
  * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
  * with the shape of a cube with L = cbrt(V)
-*/
+*/ //TODO vedere se è meglio usare az e allungare reticolo
 
-void initializeBox(double L, int N_, double *X) 
+void initializeBox(double L, double Lz, int N_, double *X) 
 {
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
-    double a = L / Na;  // interparticle distance
+    double a = L / Na;
+    double az = Lz / Na;
     if ( !isApproxEqual((double) Na, cbrt(N_/4)) )
         perror("Can't make a cubic FCC crystal with this N :(");
 
@@ -459,7 +366,7 @@ void initializeBox(double L, int N_, double *X)
     for (int n=0; n<3*N; n++)
         X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
 
-    shiftSystem(X,L);
+    shiftSystem3D(X,L,Lz);
 }
 
 
@@ -470,18 +377,26 @@ void initializeBox(double L, int N_, double *X)
 */
 // Per ora divide la parete in M fettine rettangolari, e il potenziale verrà generato da una linea per ogni fettina 
 
-void initializeWalls(double L, double x0m, double x0sigma, double ymm, double ymsigma, double *W)    
+void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, double *W, FILE * wall)    
 {
-    double * X0 = malloc(M * sizeof(double));
-    double * YM = malloc(M * sizeof(double));
+    double * X0 = malloc(M*M * sizeof(double));
+    double * YM = malloc(M*M * sizeof(double));
     
-    vecBoxMuller(x0sigma, M, X0);
-    vecBoxMuller(ymsigma, M, YM);
+    vecBoxMuller(x0sigma, M*M, X0);
+    vecBoxMuller(ymsigma, M*M, YM);
     
-    for (int l=0; l<M; l++)  {
-        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm);
-        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
+    // saves the parameter distribution to a file (the rest of the program only uses a and b instead)
+    fprintf(wall, "nx, ny, x0, ymin\n");
+    
+    for (int i=0; i<M; i++) {
+        for (int j=0; j<M; j++) {
+            int m = j + i*M;
+            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[2*m], YM[2*m+1]);
+            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
+            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
+        }
     }
+    
     
     free(X0); free(YM);
 }
@@ -505,14 +420,24 @@ inline void vecBoxMuller(double sigma, size_t length, double * A)
 }
 
 
-
 inline void shiftSystem(double *r, double L)
 {
-    for (int j=0; j<3*N; j++)
+    for (int j=0; j<3*N; j++)   {
         r[j] = r[j] - L*rint(r[j]/L);
+    }
 }
 
-inline void shiftSystem2D(double *r, double L)  // probabilmente inutile
+inline void shiftSystem3D(double *r, double L, double Lz)
+{
+    for (int j=0; j<N; j++) {
+        r[3*j] = r[3*j] - L*rint(r[3*j]/L);
+        r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
+        r[3*j+2] = r[3*j+2] - Lz*rint(r[3*j+2]/Lz);
+    }
+}
+
+// TODO chiedere se va bene tralasciare lungo z
+inline void shiftSystem2D(double *r, double L)
 {
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);
@@ -526,6 +451,101 @@ inline void shiftSystem2D(double *r, double L)  // probabilmente inutile
 
 
 /* ###############    Physical quantities of interest or needed for the system evolution    ############### */
+
+
+/*
+ * Calculate the potential energy of particle i with respect to other particles
+ * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4
+*/
+
+double energySingle(const double *r, double L, int i)
+{
+    double V = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    for (int l=0; l<N; l++)  
+    {
+        if (l != i)   
+        {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L);
+            dr2 = dx*dx + dy*dy + dz*dz;
+            
+            if (dr2 < L*L/4)
+            {
+                dr6 = dr2*dr2*dr2;
+                V += 1.0/(dr6*dr6) - 1.0/dr6;
+            }
+        }
+    }
+    return V*4;
+}
+
+
+/*
+ * Calculate the forces acting on particle i due to the interaction with other particles
+ * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
+*/
+
+void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
+{
+    double dx, dy, dz, dr2, dr8, dV;
+    *Fx = 0.0;
+    *Fy = 0.0;
+    *Fz = 0.0;
+
+    for (int l=0; l<N; l++)  
+    {
+         if (l != i)   
+         {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - Lz*rint(dz/Lz); // le particelle oltre la parete vanno sentite?
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)
+            {
+                dr8 = dr2*dr2*dr2*dr2;
+                dV = 24.0/dr8 - 48.0/(dr8*dr2*dr2*dr2);
+                *Fx -= dV*dx;
+                *Fy -= dV*dy;
+                *Fz -= dV*dz;
+            }
+        }
+    }
+}
+
+
+
+/*
+ * Calculate the interparticle potential energy of the system
+*/
+
+double energy(const double *r, double L)  
+{
+    double V = 0.0;
+    double dx, dy, dz, dr2;
+    for (int l=1; l<N; l++)  {
+        for (int i=0; i<l; i++)   {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)
+                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
+        }
+    }
+    return V*4;
+}
+
 
 
 /*
@@ -547,7 +567,7 @@ void forces(const double *r, double L, double *F)
             dy = r[3*l+1] - r[3*i+1];
             dy = dy - L*rint(dy/L);
             dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
+            //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
             if (dr2 < L*L/4)    
             {
@@ -566,91 +586,17 @@ void forces(const double *r, double L, double *F)
 }
 
 
-/*
- * Calculate the forces acting on particle i due to the interaction with other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
-*/
-
-void force(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
-{
-    double dx, dy, dz, dr2, dr8, dV;
-    *Fx = 0.0;
-    *Fy = 0.0;
-    *Fz = 0.0;
-
-    for (int l=0; l<N; l++)  
-    {
-         if (l != i)   
-         {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
-            {
-                dr8 = dr2*dr2*dr2*dr2;
-                dV = 24.0/dr8 - 48.0/(dr8*dr2*dr2*dr2);
-                *Fx -= dV*dx;
-                *Fy -= dV*dy;
-                *Fz -= dV*dz;
-            }
-        }
-    }
-}
-
-
 
 /*
- * Calculate the force exerted on one particle by the surface.
- * Be careful, it doesn't initialize F to zero, it only adds.
+ * Calculates ONLY the pressure due to the virial contribution,
+ * but from both particle-particle and wall-particle interactions.
  * 
 */
-// sentire forza da tutti i segmenti? Solo quelli più vicini?
 
-void wallsForce(double rx, double ry, double rz, const double * W, double L, double *Fx, double *Fy, double *Fz) 
-{ 
-    double dx, dy, dz, dr2, dr8, dV;
-    double dw = L/M;
-    
-    for (int m=0; m<M; m++)  
-    {
-        //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-        dx = rx - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        //dy = ry;
-        //dy = dy - L*rint(dy/L);
-        // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
-        // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
-        // se rz è negativo, dz = (rz+L/2) > 0
-        // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
-        dz = rz + L/2;
-        dz = dz - L*rint(dz/L);
-        dr2 = dx*dx + dz*dz;
-        
-        if (dr2 < L*L/4)
-        {
-            dr8 = dr2*dr2*dr2*dr2;
-            dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
-            *Fx -= dV*dx;
-            //*Fy -= dV*dy;
-            *Fz -= dV*dz;
-        }
-    }
-}
-
-
-/*
- * Calculate the interparticle potential energy of the system
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
-*/
-
-double energy(const double *r, double L)  
+double pressure(const double *r, double L, double Lz)  
 {
-    double V = 0.0;
-    double dx, dy, dz, dr2;
+    double P = 0.0;
+    double dx, dy, dz, dr2, dr6;
     for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
@@ -658,71 +604,42 @@ double energy(const double *r, double L)
             dy = r[3*l+1] - r[3*i+1];
             dy = dy - L*rint(dy/L);
             dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
+            //dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
-                V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
-        }
-    }
-    return V*4;
-}
-
-
-/*
- * Calculate the potential energy of particle i with respect to other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4
-*/
-
-double energySingle(const double *r, double L, int i)
-{
-    double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    for (int l=0; l<N; l++)  
-    {
-        if (l != i)   
-        {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dy*dy + dz*dz;
-            
-            if (dr2 < L*L/4)
+            if (dr2 < L*L/4)    
             {
+                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
                 dr6 = dr2*dr2*dr2;
-                V += 1.0/(dr6*dr6) - 1.0/dr6;
+                P += 24.0/dr6 - 48.0/(dr6*dr6);
             }
         }
     }
-    return V*4;
+    return -P/(3*L*L*Lz);
 }
 
 
+
 /*
- * Calculate the potential energy between the particles and the wall
+ * Calculate the potential energy between one particle and the wall
  * 
 */
 
-double wallsEnergy(const double *r, const double *W, double L)  
+double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L, double Lz)
 {
     double V = 0.0;
     double dx, dy, dz, dr2, dr6;
-    double dw = L/M;
+    double dw = L/M;    // distance between two wall elements
     
-    for (int m=0; m<M; m++)  
-    {
-        for (int i=0; i<N; i++)  
-        {
-            //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-            dx = r[3*i] - m*dw + dw/2;
+    for (int i=0; i<M; i++) {
+        for (int j=0; j<M; j++) {
+            int m = j + i*M;
+            dx = rx - i*dw + dw/2;
             dx = dx - L*rint(dx/L);
-            //dy = r[3*i+1];
-            //dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + L/2;
-            dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dz*dz;
+            dy = ry - j*dw + dw/2;
+            dy = dy - L*rint(dy/L);
+            dz = rz + Lz/2;
+            dz = dz - Lz*rint(dz/Lz);
+            dr2 = dx*dx + dy*dy + dz*dz;
         
             if (dr2 < L*L/4)
             {
@@ -735,104 +652,131 @@ double wallsEnergy(const double *r, const double *W, double L)
 }
 
 
+
 /*
- * Calculate the potential energy between one particle and the wall
+ * Calculate the force exerted on one particle by the surface.
+ * Be careful, it doesn't initialize F to zero, it only adds.
+ * 
+*/
+// sentire forza da tutti i segmenti? Solo quelli più vicini?
+
+void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz) 
+{ 
+    double dx, dy, dz, dr2, dr8, dV;
+    double dw = L/M;    // distance between consecutive wall potential sources
+    
+   for (int i=0; i<M; i++) 
+   {
+        for (int j=0; j<M; j++) 
+        {
+            int m = j + i*M;
+            dx = rx - i*dw + dw/2;
+            dx = dx - L*rint(dx/L);
+            dy = ry - j*dw + dw/2;
+            dy = dy - L*rint(dy/L);
+            // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
+            // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
+            // se rz è negativo, dz = (rz+L/2) > 0
+            // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
+            dz = rz + Lz/2;
+            dz = dz - Lz*rint(dz/Lz);
+            dr2 = dx*dx + dy*dy + dz*dz;
+        
+            if (dr2 < L*L/4)
+            {
+                dr8 = dr2*dr2*dr2*dr2;
+                dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
+                *Fx -= dV*dx;
+                *Fy -= dV*dy;
+                *Fz -= dV*dz;
+            }
+        }
+    }
+}
+
+
+
+/*
+ * Calculate the potential energy between the particles and the wall
  * 
 */
 
-double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L)
+double wallsEnergy(const double *r, const double *W, double L, double Lz)  
 {
     double V = 0.0;
     double dx, dy, dz, dr2, dr6;
     double dw = L/M;
     
-    for (int m=0; m<M; m++)  
-    {
-        //dividendo parete anche lungo x, aggiungere dy come dx, aggiungere dy^2 a dr2
-        dx = rx - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        //dy = ry;
-        //dy = dy - L*rint(dy/L);
-        dz = rz + L/2;
-        dz = dz - L*rint(dz/L);
-        dr2 = dx*dx + dz*dz;
-        
-        if (dr2 < L*L/4)
+     for (int i=0; i<M; i++) 
+     {
+        for (int j=0; j<M; j++) 
         {
-            dr6 = dr2*dr2*dr2;
-            V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+            int m = j + i*M;
+            for (int n=0; n<N; n++)  
+            {
+                dx = r[3*n] - i*dw + dw/2;
+                dx = dx - L*rint(dx/L);
+                dy = r[3*n+1] - j*dw + dw/2;
+                dy = dy - L*rint(dy/L);
+                dz = r[3*n+2] + Lz/2;
+                dz = dz - Lz*rint(dz/Lz);
+                dr2 = dx*dx + dy*dy + dz*dz;
+        
+                if (dr2 < L*L/4)
+                {
+                    dr6 = dr2*dr2*dr2;
+                    V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+                }
+            }
         }
     }
     return V*4;
 }
 
 
-/*
- * Calculates ONLY the pressure due to the virial contribution,
- * but from both particle-particle and wall-particle interactions.
- * 
-*/
-
-double pressure(const double *r, double L)  
-{
-    double P = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    for (int l=1; l<N; l++)  {
-        for (int i=0; i<l; i++)   {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)    {
-                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
-                dr6 = dr2*dr2*dr2;
-                P += 24.0/dr6 - 48.0/(dr6*dr6);
-            }
-        }
-    }
-    return -P/(3*L*L*L);
-}
-
-
-double wallsPressure(const double *r, const double * W, double L)
+double wallsPressure(const double *r, const double * W, double L, double Lz)
 {
     double P = 0.0;
     double dx, dy, dz, dr2, dr6;
     double dw = L/M;
     
-    for (int m=0; m<M; m++)  
+    for (int i=0; i<M; i++) 
     {
-        for (int i=0; i<N; i++)  
+        for (int j=0; j<M; j++) 
         {
-            dx = r[3*i] - m*dw + dw/2;
-            dx = dx - L*rint(dx/L);
-            //dy = r[3*i+1];
-            //dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + L/2;
-            dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dz*dz;
-            
-            if (dr2 < L*L/4)
+            int m = j + i*M;
+            for (int n=0; n<N; n++)  
             {
-                dr6 = dr2*dr2*dr2;
-                P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+                dx = r[3*n] - i*dw + dw/2;
+                dx = dx - L*rint(dx/L);
+                dy = r[3*n+1] - j*dw + dw/2;
+                dy = dy - L*rint(dy/L);
+                dz = r[3*n+2] + L/2;
+                dz = dz - Lz*rint(dz/Lz);
+                dr2 = dx*dx + dy*dy + dz*dz;
+            
+                if (dr2 < L*L/4)
+                {
+                    dr6 = dr2*dr2*dr2;
+                    P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+                }
             }
         }
     }
-    return -P/(3*L*L*L);
+    return -P/(3*L*L*Lz);
 }
+
+
 
 
 /*
  * Divides the volume in N voxels and stores the number of particles in each voxel.
  * returns a N/4 array containing the number of particles in each block, iterating in the z, then y, then x direction.
- * D isn't reinitialized, so it can be used for cunulative counting.
- */
+ * D isn't reinitialized, so it can be used for cumulative counting.
+ * 
+ */ // Attualmente i blocchi sono dei parallelepipedi di dimensione costante. TODO
 
-void localDensity(const double *r, double L, int Nv, unsigned long int *D)
+void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D)
 {
     double * p = malloc(3*N * sizeof(double));
     memcpy(p, r, 3*N * sizeof(double));
@@ -843,17 +787,18 @@ void localDensity(const double *r, double L, int Nv, unsigned long int *D)
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
-        perror("The number passed to localDensity() should be a perfect cube");
+        printf("The number passed to localDensity() should be a perfect cube, got instead %f != %f\n", cbrt(Nv), (double) Nl);
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
+    double dLz = Lz / Nl;
     
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dL && p[3*n+2]<(k+1)*dL))
+                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
                         D[v]++;
                 }
             }
@@ -1031,7 +976,7 @@ inline double variance_corr(const double * A, double tau, size_t length)
 
 inline bool isApproxEqual(double a, double b)
 {
-    if (fabs(a-b) < 1e-15)
+    if (fabs(a-b) < 1e-12)
         return true;
     else
         return false;
@@ -1051,4 +996,41 @@ int * currentTime()
     return currenttime;
 }
 
+void make_directory(const char* name) 
+{
+    struct stat st = {0};
+    
+    #ifdef __linux__
+       if (stat(name, &st) == -1) { mkdir(name, 777); }
+    #else
+       _mkdir(name);
+    #endif
+}
 
+void rek_mkdir(char *path)
+{
+  char *sep = strrchr(path, '/' );
+  if(sep != NULL) {
+    *sep = 0;
+    rek_mkdir(path);
+    *sep = '/';
+  }
+  if( mkdir(path,0755) && errno != EEXIST )
+    printf("error while trying to create '%s'\n%m\n",path ); 
+}
+
+
+FILE *fopen_mkdir( char *path, char *mode )
+{
+    char *sep = strrchr(path, '/' );
+    if(sep ) { 
+       char *path0 = strdup(path);
+       path0[ sep - path ] = 0;
+       rek_mkdir(path0);
+       free(path0);
+    } 
+    return fopen(path,mode);
+}
+
+
+ 
