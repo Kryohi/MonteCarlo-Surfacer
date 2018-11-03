@@ -32,14 +32,15 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
-    int Nv = 30*30*30; // number of cubes to divide the volume and compute the local density (should be a perfect cube)
+    int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
 
     
     clock_t start, end;
     double sim_time;
     srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3f, for %d steps...\n", N, T, rho, A, maxsteps);
+    printf("Starting new run with %d particles, ", N);
+    printf("T=%0.2f, rho=%0.4f, A=%0.3f, for %d steps...\n", T, rho, A, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -252,7 +253,8 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // Calculate the acceptance probability for the single-particle move
         
-        deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) + 2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
+        deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) +
+            2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
 
         ap = exp(-(Un-Um + (deltaX*(Fnx+Fmx) + deltaY*(Fny+Fmy) + deltaZ*(Fnz+Fmz))/2 + deltaW)/T);
 
@@ -631,9 +633,9 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            dx = rx - i*dw + dw/2;
+            dx = rx - i*dw - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw + dw/2;
+            dy = ry - j*dw - dw/2;
             dy = dy - L*rint(dy/L);
             dz = rz + Lz/2;
             dz = dz - Lz*rint(dz/Lz);
@@ -668,9 +670,9 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         for (int j=0; j<M; j++) 
         {
             int m = j + i*M;
-            dx = rx - i*dw + dw/2;
+            dx = rx - i*dw - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw + dw/2;
+            dy = ry - j*dw - dw/2;
             dy = dy - L*rint(dy/L);
             // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
             // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
@@ -712,9 +714,9 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw + dw/2;
+                dx = r[3*n] - i*dw - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw + dw/2;
+                dy = r[3*n+1] - j*dw - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + Lz/2;
                 dz = dz - Lz*rint(dz/Lz);
@@ -745,9 +747,9 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw + dw/2;
+                dx = r[3*n] - i*dw - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw + dw/2;
+                dy = r[3*n+1] - j*dw - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + L/2;
                 dz = dz - Lz*rint(dz/Lz);
@@ -788,7 +790,7 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
-        printf("The number passed to localDensity() should be a perfect cube, got instead %f != %f\n", cbrt(Nv), (double) Nl);
+        printf("The number passed to localDensity() should be a perfect cube, got %f != %f\n", cbrt(Nv), (double) Nl);
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
@@ -799,7 +801,8 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
+                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)
+                        && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
                         D[v]++;
                 }
             }

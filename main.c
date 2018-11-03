@@ -41,7 +41,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 0.7;       // average width of the wall (distance at which the Lennard-Jones potential is 0)
+    double x0m = 0.7;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
     double ym = 1.8;        // average bounding energy
     double ymsigma = 0.3;
