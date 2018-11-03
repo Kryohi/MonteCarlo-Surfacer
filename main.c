@@ -27,7 +27,7 @@ int main(int argc, char** argv)
     */
     
     // parameters a and b for every piece of the wall
-    double * W = calloc(2*M, sizeof(double));
+    double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = 0.7;       // average width of the wall (distance at which the Lennard-Jones potential is 0)

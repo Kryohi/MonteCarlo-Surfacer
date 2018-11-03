@@ -12,6 +12,7 @@
  * passare anche rank processo e metterlo in tutti i printf
  * in generale fare in modo che noMPI venga trattato come se avesse rank 0
  * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
+ * vedere se si può semplificare calcolo distanze da pareti
  * 
  */
 
@@ -376,21 +377,24 @@ void initializeBox(double L, double Lz, int N_, double *X)
 
 void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, double *W, FILE * wall)    
 {
-    double * X0 = malloc(M * sizeof(double));
-    double * YM = malloc(M * sizeof(double));
+    double * X0 = malloc(M*M * sizeof(double));
+    double * YM = malloc(M*M * sizeof(double));
     
-    vecBoxMuller(x0sigma, M, X0);
-    vecBoxMuller(ymsigma, M, YM);
+    vecBoxMuller(x0sigma, M*M, X0);
+    vecBoxMuller(ymsigma, M*M, YM);
     
     // saves the parameter distribution to a file (the rest of the program only uses a and b instead)
-    fprintf(wall, "x0, ymin\n");
-    for (int m=0; m<M; m++)
-        fprintf(wall, "%f, %f\n", X0[2*m], YM[2*m+1]);
+    fprintf(wall, "nx, ny, x0, ymin\n");
     
-    for (int l=0; l<M; l++)  {
-        W[2*l] = pow(X0[l]+x0m, 12.) * (YM[l]+ymm)*(YM[l]+ymm);
-        W[2*l+1] = pow(X0[l]+x0m, 6.) * (YM[l]+ymm);
+    for (int i=0; i<M; i++) {
+        for (int j=0; j<M; j++) {
+            int m = j + i*M;
+            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[2*m], YM[2*m+1]);
+            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
+            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
+        }
     }
+    
     
     free(X0); free(YM);
 }
@@ -623,22 +627,24 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 {
     double V = 0.0;
     double dx, dy, dz, dr2, dr6;
-    double dw = L/M;
+    double dw = L/M;    // distance between two wall elements
     
-    for (int m=0; m<M; m++)  
-    {
-        dx = rx - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        dy = ry;
-        dy = dy - L*rint(dy/L);
-        dz = rz + Lz/2;
-        dz = dz - Lz*rint(dz/Lz);
-        dr2 = dx*dx + dy*dy + dz*dz;
+    for (int i=0; i<M; i++) {
+        for (int j=0; j<M; j++) {
+            int m = j + i*M;
+            dx = rx - i*dw + dw/2;
+            dx = dx - L*rint(dx/L);
+            dy = ry - j*dw + dw/2;
+            dy = dy - L*rint(dy/L);
+            dz = rz + Lz/2;
+            dz = dz - Lz*rint(dz/Lz);
+            dr2 = dx*dx + dy*dy + dz*dz;
         
-        if (dr2 < L*L/4)
-        {
-            dr6 = dr2*dr2*dr2;
-            V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+            if (dr2 < L*L/4)
+            {
+                dr6 = dr2*dr2*dr2;
+                V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+            }
         }
     }
     return V*4;
@@ -658,27 +664,29 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
     double dx, dy, dz, dr2, dr8, dV;
     double dw = L/M;    // distance between consecutive wall potential sources
     
-    for (int m=0; m<M; m++)  
-    {
-        dx = rx - m*dw + dw/2;
-        dx = dx - L*rint(dx/L);
-        dy = ry;
-        dy = dy - L*rint(dy/L);
-        // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
-        // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
-        // se rz è negativo, dz = (rz+L/2) > 0
-        // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
-        dz = rz + Lz/2;
-        dz = dz - Lz*rint(dz/Lz);
-        dr2 = dx*dx + dy*dy + dz*dz;
+   for (int i=0; i<M; i++) {
+        for (int j=0; j<M; j++) {
+            int m = j + i*M;
+            dx = rx - i*dw + dw/2;
+            dx = dx - L*rint(dx/L);
+            dy = ry - j*dw + dw/2;
+            dy = dy - L*rint(dy/L);
+            // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
+            // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
+            // se rz è negativo, dz = (rz+L/2) > 0
+            // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
+            dz = rz + Lz/2;
+            dz = dz - Lz*rint(dz/Lz);
+            dr2 = dx*dx + dy*dy + dz*dz;
         
-        if (dr2 < L*L/4)
-        {
-            dr8 = dr2*dr2*dr2*dr2;
-            dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
-            *Fx -= dV*dx;
-            *Fy -= dV*dy;
-            *Fz -= dV*dz;
+            if (dr2 < L*L/4)
+            {
+                dr8 = dr2*dr2*dr2*dr2;
+                dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
+                *Fx -= dV*dx;
+                *Fy -= dV*dy;
+                *Fz -= dV*dz;
+            }
         }
     }
 }
@@ -696,22 +704,26 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
     double dx, dy, dz, dr2, dr6;
     double dw = L/M;
     
-    for (int m=0; m<M; m++)  
-    {
-        for (int i=0; i<N; i++)  
+     for (int i=0; i<M; i++) 
+     {
+        for (int j=0; j<M; j++) 
         {
-            dx = r[3*i] - m*dw + dw/2;
-            dx = dx - L*rint(dx/L);
-            dy = r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + Lz/2;
-            dz = dz - Lz*rint(dz/Lz);
-            dr2 = dx*dx + dy*dy + dz*dz;
-        
-            if (dr2 < L*L/4)
+            int m = j + i*M;
+            for (int n=0; n<N; i++)  
             {
-                dr6 = dr2*dr2*dr2;
-                V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+                dx = r[3*n] - i*dw + dw/2;
+                dx = dx - L*rint(dx/L);
+                dy = r[3*n+1] - j*dw + dw/2;
+                dy = dy - L*rint(dy/L);
+                dz = r[3*n+2] + Lz/2;
+                dz = dz - Lz*rint(dz/Lz);
+                dr2 = dx*dx + dy*dy + dz*dz;
+        
+                if (dr2 < L*L/4)
+                {
+                    dr6 = dr2*dr2*dr2;
+                    V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
+                }
             }
         }
     }
@@ -725,22 +737,26 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
     double dx, dy, dz, dr2, dr6;
     double dw = L/M;
     
-    for (int m=0; m<M; m++)  
+    for (int i=0; i<M; i++) 
     {
-        for (int i=0; i<N; i++)  
+        for (int j=0; j<M; j++) 
         {
-            dx = r[3*i] - m*dw + dw/2;
-            dx = dx - L*rint(dx/L);
-            //dy = r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*i+2] + L/2;
-            dz = dz - Lz*rint(dz/Lz);
-            dr2 = dx*dx + dz*dz;
-            
-            if (dr2 < L*L/4)
+            int m = j + i*M;
+            for (int n=0; n<N; n++)  
             {
-                dr6 = dr2*dr2*dr2;
-                P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+                dx = r[3*n] - i*dw + dw/2;
+                dx = dx - L*rint(dx/L);
+                dy = r[3*n+1] - j*dw + dw/2;
+                dy = dy - L*rint(dy/L);
+                dz = r[3*n+2] + L/2;
+                dz = dz - Lz*rint(dz/Lz);
+                dr2 = dx*dx + dy*dy + dz*dz;
+            
+                if (dr2 < L*L/4)
+                {
+                    dr6 = dr2*dr2*dr2;
+                    P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+                }
             }
         }
     }

@@ -18,8 +18,8 @@
 // + usare argp?
 
 
-// number of gridpoints for the potential of the walls (must be a perfect square):
-#define M 9
+// number of gridpoints for the potential of the walls, along one dimension (M^2 total):
+#define M 3
 
 // number of particles:
 #define N 32
