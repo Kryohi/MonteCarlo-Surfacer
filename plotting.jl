@@ -1,22 +1,40 @@
-using Statistics, CSVFiles, DataFrames, Printf, PyCall, Plots, ProgressMeter, FFTW
-pygui(:qt); import PyPlot: pygui; PyPlot.pygui(true)
+using Statistics, CSVFiles, DataFrames, Printf, PyCall, ProgressMeter, FFTW
+pygui(:qt); import PyPlot: pygui
+using Plots
+pygui(:qt); :qt
 pyplot()
+PyPlot.pygui(true)
 #plotlyjs(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
 #run(`./smc`)
 
 
-function make3Dplot(A::Array{Float64}; T = -1.0, rho = -1.0, reuse=true)
+function make3Dplot(A::Array{Float64,1}; T = -1.0, L = -1.0, Lz = -1.0, reuse=true)
     #Plots.default(size=(800,600))
     N = Int(length(A)/3)
-    if rho == -1.0
+    if L == -1.0
         Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue,Plots.stroke(0)),
          w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
-        L = cbrt(N/rho)
         Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
-         w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-L/2,L/2)), leg=false, reuse=reuse)
+         w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)), leg=false, reuse=reuse)
+    end
+end
+
+function make3Dplot(M::DataFrame, n1, n2; T = -1.0, L = -1.0, Lz = -1.0, reuse=true)
+
+    N = Int((size(M,2)-1)/3)
+    A = [dfp[1, col] for col in 1:3N] # subset of columns
+    Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
+    w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)),
+    leg=false)
+
+    for n ∈ n1+1:n2
+        A = [dfp[n, col] for col in 1:3N] # subset of columns
+        Plots.scatter3d!(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
+        w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)),
+        leg=false)
     end
 end
 
@@ -68,26 +86,45 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
 end
 
 
-N = 108
-M = 8
-rho = 0.04
-T = 0.8
+N = 32
+M = 3
+L = 16
+Lz = 28
+rho = round(Int, 10000*N/(L*L*Lz)) / 10000
+T = 0.7
 
-parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
-dfp = DataFrame(load(string("./Data/positions", parameters)))
-dfw = DataFrame(load(string("./Data/wall", parameters)))
-dfd = DataFrame(load(string("./Data/data", parameters)))
-C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
-lD = DataFrame(load(string("./Data/localdensity", parameters)))
+parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
+#cd(string("./Data/data", parameters))
+
+dfp = DataFrame(load(string("./positions", parameters, ".csv")))
+dfw = DataFrame(load(string("./wall", parameters, ".csv")))
+dfd = DataFrame(load(string("./data", parameters, ".csv")))
+C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
+lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
-lD[:n] = lD[:n] / length(dfd.E)
+#lD[:n] = lD[:n] / length(dfd.E)
+
+## local density plot
+nd = Int(cbrt(length(lD.n)))
+LD_impilata = zeros(nd,nd)
+
+for i = 0:nd-1
+    for j = 0:nd-1
+        LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
+    end
+end
+
+heatmap(LD_impilata)
+
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-X0 = [dfp[148776, col] for col in 1:3N] # subset of columns
-make3Dplot(X0, rho=rho, T=T, reuse=false)
-gui()
+X0 = [dfp[88777, col] for col in 1:3N] # subset of columns
+make3Dplot(X0, L=L, Lz=Lz, T=T, reuse=false)
+
+make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T, reuse=false)
+
 
 ## Check energy
 Plots.plot(dfd.E[1:100:end], reuse=false, legend=false)

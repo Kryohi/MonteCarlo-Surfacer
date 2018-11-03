@@ -6,13 +6,12 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabile passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
- * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
  * fare grafico di local density in funzione di E legame
- * mettere tutte le funzioni fuori dal main in file separato accessibile anche da SMC_MPI
  * passare anche rank processo e metterlo in tutti i printf
  * in generale fare in modo che noMPI venga trattato come se avesse rank 0
  * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
  * vedere se si può semplificare calcolo distanze da pareti
+ * localDensity con numero minore di divisioni lungo z
  * 
  */
 
@@ -25,22 +24,23 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // System properties
     double rho = N / (L*L*Lz);
     //double gamma = 0.5;
-    //double dT = 2e-3;
+    //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 2e-3;
+    double A = 0.2;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 42000;
-    int Nv = 30*30*30; // number of cubes to divide the volume and compute the local density (should be a perfect cube)
+    int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
 
     
     clock_t start, end;
     double sim_time;
     srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, ", N);
+    printf("T=%0.2f, rho=%0.4f, A=%0.3f, for %d steps...\n", T, rho, A, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -57,7 +57,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // Initialize csv files
     char filename[64]; 
-    snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./positions_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -66,7 +66,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 64, "./Data/data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./data_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
@@ -74,15 +74,15 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     fprintf(data, "E, P, jj\n");
     
     FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche fare come con positions
-    snprintf(filename, 64, "./Data/localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     localdensity = fopen(filename, "w");
     if (localdensity == NULL)
         perror("error while writing on localdensity.csv");
     
-    fprintf(localdensity, "x, y, z, n\n");
+    fprintf(localdensity, "nx, ny, nz, n\n");
     
     FILE * autocorrelation;
-    snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     autocorrelation = fopen(filename, "w");
     if (autocorrelation == NULL)
         perror("error while writing on autocorrelation.csv");
@@ -101,7 +101,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     
-    printf("\nThermalization completed with ");
+    printf("\nThermalization completed in %f s with", sim_time);
     printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
     
     for (int n=0; n<eqsteps; n++)
@@ -120,7 +120,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
             int k = (int)(n/gather_lapse);
             
             P[k] = pressure(R, L, Lz);
-            P[k] += wallsPressure(R, W, L, Lz);
+            //P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
@@ -152,7 +152,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9lf,%0.9lf,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     for (int i=0; i<Nl; i++)    {
@@ -178,8 +178,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps);
-    results.dE = sqrt(variance(E, maxsteps));
-    printf("variance_corr(E) = %f \n", sqrt(variance_corr(E, tau, maxsteps)));
+    results.dE = sqrt(variance_corr(E, tau, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
@@ -254,7 +253,8 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
         // Calculate the acceptance probability for the single-particle move
         
-        deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) + 2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
+        deltaW = ((Fnx-Fmx)*(Fnx-Fmx) + (Fny-Fmy)*(Fny-Fmy) + (Fnz-Fmz)*(Fnz-Fmz) +
+            2*((Fnx-Fmx)*Fmx + (Fny-Fmy)*Fmy + (Fnz-Fmz)*Fmz)) * A/(4*T);
 
         ap = exp(-(Un-Um + (deltaX*(Fnx+Fmx) + deltaY*(Fny+Fmy) + deltaZ*(Fnz+Fmz))/2 + deltaW)/T);
 
@@ -391,9 +391,9 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[2*m], YM[2*m+1]);
-            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
-            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
+            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m]+x0m, YM[m]+ymm);
+            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);     // a
+            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);                // b
         }
     }
     
@@ -633,9 +633,9 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            dx = rx - i*dw + dw/2;
+            dx = rx - i*dw - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw + dw/2;
+            dy = ry - j*dw - dw/2;
             dy = dy - L*rint(dy/L);
             dz = rz + Lz/2;
             dz = dz - Lz*rint(dz/Lz);
@@ -670,9 +670,9 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         for (int j=0; j<M; j++) 
         {
             int m = j + i*M;
-            dx = rx - i*dw + dw/2;
+            dx = rx - i*dw - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw + dw/2;
+            dy = ry - j*dw - dw/2;
             dy = dy - L*rint(dy/L);
             // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
             // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
@@ -714,9 +714,9 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw + dw/2;
+                dx = r[3*n] - i*dw - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw + dw/2;
+                dy = r[3*n+1] - j*dw - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + Lz/2;
                 dz = dz - Lz*rint(dz/Lz);
@@ -747,9 +747,9 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw + dw/2;
+                dx = r[3*n] - i*dw - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw + dw/2;
+                dy = r[3*n+1] - j*dw - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + L/2;
                 dz = dz - Lz*rint(dz/Lz);
@@ -782,12 +782,15 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
     memcpy(p, r, 3*N * sizeof(double));
     
     // shift the particles positions by L/2 for convenience
-    for (int j=0; j<3*N; j++)
-        p[j] = p[j] + L/2;
+    for (int n=0; n<N; n++) {
+        p[3*n] = p[3*n] + L/2;
+        p[3*n+1] = p[3*n+1] + L/2;
+        p[3*n+2] = p[3*n+2] + Lz/2;
+    }
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
-        printf("The number passed to localDensity() should be a perfect cube, got instead %f != %f\n", cbrt(Nv), (double) Nl);
+        printf("The number passed to localDensity() should be a perfect cube, got %f != %f\n", cbrt(Nv), (double) Nl);
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
@@ -798,7 +801,8 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
+                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)
+                        && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
                         D[v]++;
                 }
             }
@@ -982,6 +986,7 @@ inline bool isApproxEqual(double a, double b)
         return false;
 }
 
+
 int * currentTime()
 {
     time_t now;
@@ -996,41 +1001,28 @@ int * currentTime()
     return currenttime;
 }
 
+
 void make_directory(const char* name) 
 {
     struct stat st = {0};
     
     #ifdef __linux__
-       if (stat(name, &st) == -1) { mkdir(name, 777); }
+       if (stat(name, &st) == -1) { mkdir(name, 0777); }
     #else
        _mkdir(name);
     #endif
 }
 
-void rek_mkdir(char *path)
+
+void print_path()
 {
-  char *sep = strrchr(path, '/' );
-  if(sep != NULL) {
-    *sep = 0;
-    rek_mkdir(path);
-    *sep = '/';
-  }
-  if( mkdir(path,0755) && errno != EEXIST )
-    printf("error while trying to create '%s'\n%m\n",path ); 
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        printf("Current working dir: %s\n", cwd);
+    } else {
+        perror("getcwd() error");
+    }
 }
-
-
-FILE *fopen_mkdir( char *path, char *mode )
-{
-    char *sep = strrchr(path, '/' );
-    if(sep ) { 
-       char *path0 = strdup(path);
-       path0[ sep - path ] = 0;
-       rek_mkdir(path0);
-       free(path0);
-    } 
-    return fopen(path,mode);
-}
-
+    
 
  

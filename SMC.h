@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
 #include <complex.h>
 #include <fftw3.h>
 // + usare argp?
@@ -22,7 +23,7 @@
 #define M 3
 
 // number of particles:
-#define N 32
+#define N 108
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
@@ -84,7 +85,9 @@ double variance_corr(const double * A, double tau, size_t length);
 void zeros(size_t length, double *A);
 void elforel(const double *A, const double * B, double * C, size_t length);
 bool isApproxEqual(double a, double b);
+
 int * currentTime();
+void make_directory(const char* name);
 
 
 #endif
