@@ -28,7 +28,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     //double dT = 2e-3;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 2e-3;
+    double A = 2e-2;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -40,7 +40,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     double sim_time;
     srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.2fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3f, for %d steps...\n", N, T, rho, A, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -57,7 +57,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // Initialize csv files
     char filename[64]; 
-    snprintf(filename, 64, "./positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./positions_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -66,7 +66,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 64, "./data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./data_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
@@ -74,7 +74,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     fprintf(data, "E, P, jj\n");
     
     FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche fare come con positions
-    snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     localdensity = fopen(filename, "w");
     if (localdensity == NULL)
         perror("error while writing on localdensity.csv");
@@ -82,7 +82,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     fprintf(localdensity, "x, y, z, n\n");
     
     FILE * autocorrelation;
-    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     autocorrelation = fopen(filename, "w");
     if (autocorrelation == NULL)
         perror("error while writing on autocorrelation.csv");
@@ -152,7 +152,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9lf,%0.9lf,%d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     for (int i=0; i<Nl; i++)    {
@@ -178,8 +178,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps);
-    results.dE = sqrt(variance(E, maxsteps));
-    printf("variance_corr(E) = %f \n", sqrt(variance_corr(E, tau, maxsteps)));
+    results.dE = sqrt(variance_corr(E, tau, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
@@ -1010,14 +1009,13 @@ void make_directory(const char* name)
 }
 
 
-void printPath()
+void print_path()
 {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         printf("Current working dir: %s\n", cwd);
     } else {
         perror("getcwd() error");
-        return 1;
     }
 }
     

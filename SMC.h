@@ -85,7 +85,9 @@ double variance_corr(const double * A, double tau, size_t length);
 void zeros(size_t length, double *A);
 void elforel(const double *A, const double * B, double * C, size_t length);
 bool isApproxEqual(double a, double b);
+
 int * currentTime();
+void make_directory(const char* name) 
 
 
 #endif

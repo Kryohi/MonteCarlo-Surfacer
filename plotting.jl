@@ -77,12 +77,13 @@ M = 3
 rho = 0.0045
 T = 0.8
 
-parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f.csv" N M rho T;
-dfp = DataFrame(load(string("./Data/positions", parameters)))
-dfw = DataFrame(load(string("./Data/wall", parameters)))
-dfd = DataFrame(load(string("./Data/data", parameters)))
-C_H = DataFrame(load(string("./Data/autocorrelation", parameters)))
-lD = DataFrame(load(string("./Data/localdensity", parameters)))
+parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
+cd(string("./Data/", parameters)
+dfp = DataFrame(load(string("./positions", parameters, ".csv")))
+dfw = DataFrame(load(string("./wall", parameters, ".csv")))
+dfd = DataFrame(load(string("./data", parameters, ".csv")))
+C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
+lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 lD[:n] = lD[:n] / length(dfd.E)
