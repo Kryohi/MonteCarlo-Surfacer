@@ -25,10 +25,10 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // System properties
     double rho = N / (L*L*Lz);
     //double gamma = 0.5;
-    //double dT = 2e-3;
+    //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 2e-2;
+    double A = 0.1;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -390,7 +390,7 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[2*m], YM[2*m+1]);
+            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m], YM[m]);
             W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
             W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
         }

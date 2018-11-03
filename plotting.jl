@@ -74,11 +74,13 @@ end
 
 N = 32
 M = 3
-rho = 0.0045
-T = 0.8
+L = 16
+Lz = 28
+rho = round(Int, 10000*N/(L*L*Lz)) / 10000
+T = 0.7
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
-cd(string("./Data/", parameters)
+cd(string("./Data/data", parameters))
 dfp = DataFrame(load(string("./positions", parameters, ".csv")))
 dfw = DataFrame(load(string("./wall", parameters, ".csv")))
 dfd = DataFrame(load(string("./data", parameters, ".csv")))
@@ -87,6 +89,9 @@ lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 lD[:n] = lD[:n] / length(dfd.E)
+
+## local density plot
+
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))

@@ -87,7 +87,7 @@ void elforel(const double *A, const double * B, double * C, size_t length);
 bool isApproxEqual(double a, double b);
 
 int * currentTime();
-void make_directory(const char* name) 
+void make_directory(const char* name);
 
 
 #endif
