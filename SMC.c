@@ -100,7 +100,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     
-    printf("\nThermalization completed with ");
+    printf("\nThermalization completed in %f s with", sim_time);
     printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
     
     for (int n=0; n<eqsteps; n++)
@@ -390,8 +390,8 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
         for (int j=0; j<M; j++) {
             int m = j + i*M;
             fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m]+x0m, YM[m]+ymm);
-            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
-            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
+            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);     // a
+            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);                // b
         }
     }
     

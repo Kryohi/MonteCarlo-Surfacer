@@ -8,10 +8,17 @@ int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
     int maxsteps = 5000000;
-    int gather_lapse = (int) maxsteps/100000;     // number of steps between each acquisition of data
+    int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
     int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
-    double L = 16;
-    double Lz = 28;
+    double L, Lz;
+    #if N==32
+        L = 16;
+        Lz = 28;
+    #else
+        L = 23;
+        Lz = 42;
+    #endif
+
     double rho = N / (L*L*Lz);
     double T = 0.7;
     
