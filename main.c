@@ -7,16 +7,19 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 8000000;
+    int maxsteps = 5000000;
     int gather_lapse = (int) maxsteps/100000;     // number of steps between each acquisition of data
-    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
     double L = 16;
     double Lz = 28;
     double rho = N / (L*L*Lz);
     double T = 0.7;
     
-    // creates data folder and common filename suffix to save
-    make_directory("Data2");
+    // creates data folder and common filename suffix to save data
+    make_directory("Data");
+    char filename[64];
+    snprintf(filename, 64, "./Data/data_N%d_M%d_r%0.4f_T%0.2f", N, M, rho, T);
+    make_directory(filename);
     
     
     int *now = currentTime();
@@ -35,10 +38,8 @@ int main(int argc, char** argv)
     double ym = 1.8;        // average bounding energy
     double ymsigma = 0.3;
     
-    // save the wall potentials to a csv file 
-    char filename[64];
-    
-    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    // save the wall potentials to a csv file     
+    snprintf(filename, 64, "./Data/wall_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     FILE * wall;
     wall = fopen(filename, "w");
     if (wall == NULL)
@@ -56,7 +57,7 @@ int main(int argc, char** argv)
     
     double * R0 = calloc(3*N, sizeof(double));
    
-    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     
     if (access( filename, F_OK ) != -1) 
     {
@@ -93,7 +94,7 @@ int main(int argc, char** argv)
     
     // save the last position of every particle, to use in a later run
     FILE * last_state;
-    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./Data/last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     last_state = fopen(filename, "w");
     if (last_state == NULL)
         perror("error while writing on last_state.csv");

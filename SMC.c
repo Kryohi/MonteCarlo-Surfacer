@@ -24,9 +24,9 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
 {
     // System properties
     double rho = N / (L*L*Lz);
-    //double D = 0.5;
+    //double gamma = 0.5;
     //double dT = 2e-3;
-    //double A = D*dT;
+    //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
     double A = 2e-3;
     
@@ -38,9 +38,9 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     clock_t start, end;
     double sim_time;
-    srand(time(NULL));  // metterne uno per processo MPI
+    srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.3f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -54,6 +54,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
+    
     // Initialize csv files
     char filename[64]; 
     snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
@@ -277,6 +278,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
 
     free(displ);
 }
+
 
 /*
  * Old SMC step, doesn't work ¯\_(ツ)_/¯
@@ -520,39 +522,6 @@ void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, doubl
 
 
 
-
-/*
- * Calculates ONLY the pressure due to the virial contribution,
- * but from both particle-particle and wall-particle interactions.
- * 
-*/
-
-double pressure(const double *r, double L, double Lz)  
-{
-    double P = 0.0;
-    double dx, dy, dz, dr2, dr6;
-    for (int l=1; l<N; l++)  {
-        for (int i=0; i<l; i++)   {
-            dx = r[3*l] - r[3*i];
-            dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
-            dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
-            //dz = dz - L*rint(dz/L);
-            dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)    
-            {
-                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
-                dr6 = dr2*dr2*dr2;
-                P += 24.0/dr6 - 48.0/(dr6*dr6);
-            }
-        }
-    }
-    return -P/(3*L*L*Lz);
-}
-
-
-
 /*
  * Calculate the interparticle potential energy of the system
 */
@@ -619,6 +588,38 @@ void forces(const double *r, double L, double *F)
 
 
 /*
+ * Calculates ONLY the pressure due to the virial contribution,
+ * but from both particle-particle and wall-particle interactions.
+ * 
+*/
+
+double pressure(const double *r, double L, double Lz)  
+{
+    double P = 0.0;
+    double dx, dy, dz, dr2, dr6;
+    for (int l=1; l<N; l++)  {
+        for (int i=0; i<l; i++)   {
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            //dz = dz - L*rint(dz/L);
+            dr2 = dx*dx + dy*dy + dz*dz;
+            if (dr2 < L*L/4)    
+            {
+                //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
+                dr6 = dr2*dr2*dr2;
+                P += 24.0/dr6 - 48.0/(dr6*dr6);
+            }
+        }
+    }
+    return -P/(3*L*L*Lz);
+}
+
+
+
+/*
  * Calculate the potential energy between one particle and the wall
  * 
 */
@@ -664,8 +665,10 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
     double dx, dy, dz, dr2, dr8, dV;
     double dw = L/M;    // distance between consecutive wall potential sources
     
-   for (int i=0; i<M; i++) {
-        for (int j=0; j<M; j++) {
+   for (int i=0; i<M; i++) 
+   {
+        for (int j=0; j<M; j++) 
+        {
             int m = j + i*M;
             dx = rx - i*dw + dw/2;
             dx = dx - L*rint(dx/L);
@@ -709,7 +712,7 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
         for (int j=0; j<M; j++) 
         {
             int m = j + i*M;
-            for (int n=0; n<N; i++)  
+            for (int n=0; n<N; n++)  
             {
                 dx = r[3*n] - i*dw + dw/2;
                 dx = dx - L*rint(dx/L);
@@ -770,7 +773,8 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
  * Divides the volume in N voxels and stores the number of particles in each voxel.
  * returns a N/4 array containing the number of particles in each block, iterating in the z, then y, then x direction.
  * D isn't reinitialized, so it can be used for cumulative counting.
- */
+ * 
+ */ // Attualmente i blocchi sono dei parallelepipedi di dimensione costante. TODO
 
 void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D)
 {
@@ -783,7 +787,7 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
-        perror("The number passed to localDensity() should be a perfect cube");
+        printf("The number passed to localDensity() should be a perfect cube, got instead %f != %f\n", cbrt(Nv), (double) Nl);
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
@@ -972,7 +976,7 @@ inline double variance_corr(const double * A, double tau, size_t length)
 
 inline bool isApproxEqual(double a, double b)
 {
-    if (fabs(a-b) < 1e-15)
+    if (fabs(a-b) < 1e-12)
         return true;
     else
         return false;
