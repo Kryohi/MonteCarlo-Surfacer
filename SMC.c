@@ -27,7 +27,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 0.2;
+    double A = 5.0; // legare a L e tempearatura
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -101,8 +101,8 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
     
-    printf("\nThermalization completed in %f s with", sim_time);
-    printf("average acceptance ratio %f, mean energy %f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
+    printf("\nThermalization completed in %0.1f s with ", sim_time);
+    printf("average acceptance ratio %0.3f, mean energy %0.3f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
     
     for (int n=0; n<eqsteps; n++)
         jj[n] = 0;
@@ -124,7 +124,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
-                fprintf(positions, "%0.12lf,", R[i]);
+                fprintf(positions, "%0.4lf,", R[i]);    // provare %6g
 
             fprintf(positions, "\n");
         }
@@ -137,7 +137,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    printf("\nTime: %f s\n", sim_time);
+    printf("\nTime: %0.1f s (%0.1f per million)\n", sim_time, sim_time*1e6/maxsteps);
 
     
     
