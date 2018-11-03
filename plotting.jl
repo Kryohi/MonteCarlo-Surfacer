@@ -91,7 +91,7 @@ M = 3
 L = 30
 Lz = 70
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 1.0
+T = 0.7
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))

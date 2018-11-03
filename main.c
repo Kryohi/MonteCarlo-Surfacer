@@ -3,27 +3,14 @@
 #include "SMC.h"
 #include "SMC.c"
 
-
-// number of gridpoints for the potential of the walls, along one dimension (M^2 total):
-#define M 3
-
-// number of particles:
-#define N 108
-
-/* NON USATI
-// Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
-#define MAXSTEPS 1000000
-// frequency of acquisition and storage of thermodinamic variables
-#define MEASUREMENT_PERIOD 100 */
-
 #define rank 0
 
 
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 18000000;
-    int gather_lapse = (int) maxsteps/180000;     // number of steps between each acquisition of data
+    int maxsteps = 20000000;
+    int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
     int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
@@ -36,7 +23,7 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.7;
+    double T = 0.5;
     
     // creates data folder and common filename suffix to save data
     make_directory("Data");
