@@ -31,7 +31,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 42000;
+    int kmax = 50000;
     int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
 
     
