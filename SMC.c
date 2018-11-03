@@ -12,7 +12,7 @@
  * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
  * vedere se si può semplificare calcolo distanze da pareti
  * localDensity con numero minore di divisioni lungo z
- * 
+ * legare Elegame e sigmaElegame con T
  */
 
 
@@ -27,11 +27,11 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 5.0; // legare a L e tempearatura
+    double A = 8.0; // legare a L e tempearatura
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 50000;
+    int kmax = 500000;
     int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
 
     

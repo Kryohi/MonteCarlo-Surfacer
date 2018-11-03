@@ -9,9 +9,9 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 20000000;
+    int maxsteps = 24000000;
     int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 6000000;       // number of steps for the equilibrium pre-simulation
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
@@ -23,7 +23,7 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.5;
+    double T = 0.23;
     
     // creates data folder and common filename suffix to save data
     make_directory("Data");
