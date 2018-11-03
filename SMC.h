@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <limits.h>
 #include <complex.h>
 #include <fftw3.h>
 // + usare argp?

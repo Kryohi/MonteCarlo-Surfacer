@@ -1,6 +1,10 @@
-using Statistics, CSVFiles, DataFrames, Printf, PyCall, Plots, ProgressMeter, FFTW
-pygui(:qt); import PyPlot: pygui; PyPlot.pygui(true)
+using Statistics, CSVFiles, DataFrames, Printf, PyCall, ProgressMeter, FFTW
+pygui(:qt); import PyPlot: pygui
+pygui(:qt); import PyPlot: pygui
+using Plots
+pygui(:qt); :qt
 pyplot()
+PyPlot.pygui(true)
 #plotlyjs(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
@@ -68,12 +72,12 @@ function fft_acf(H::Array{Float64,1}, k_max::Int)
 end
 
 
-N = 108
-M = 8
-rho = 0.04
+N = 32
+M = 3
+rho = 0.0045
 T = 0.8
 
-parameters = @sprintf "_N%d_M%d_r%0.2f_T%0.2f.csv" N M rho T;
+parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f.csv" N M rho T;
 dfp = DataFrame(load(string("./Data/positions", parameters)))
 dfw = DataFrame(load(string("./Data/wall", parameters)))
 dfd = DataFrame(load(string("./Data/data", parameters)))

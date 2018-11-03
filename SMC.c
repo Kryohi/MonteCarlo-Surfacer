@@ -40,7 +40,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     double sim_time;
     srand(time(NULL)); //should be different for each process
     
-    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.3fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
+    printf("Starting new run with %d particles, T=%0.2f, rho=%0.4f, A=%0.2fe-3, for %d steps...\n", N, T, rho, A*1e3, maxsteps);
 
     
     //copy the initial positions R0 (common to all the simulations) to the local array R
@@ -57,7 +57,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     
     // Initialize csv files
     char filename[64]; 
-    snprintf(filename, 64, "./Data/positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./positions_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *positions = fopen(filename, "w");
     if (positions == NULL)
         perror("error while writing on positions.csv");
@@ -66,7 +66,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
     
-    snprintf(filename, 64, "./Data/data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./data_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     FILE *data = fopen(filename, "w");
     if (data == NULL)
         perror("error while writing on data.csv");
@@ -74,7 +74,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     fprintf(data, "E, P, jj\n");
     
     FILE * localdensity;    // per ora restituisce numero cumulativo, si potrebbe anche fare come con positions
-    snprintf(filename, 64, "./Data/localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     localdensity = fopen(filename, "w");
     if (localdensity == NULL)
         perror("error while writing on localdensity.csv");
@@ -82,7 +82,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     fprintf(localdensity, "x, y, z, n\n");
     
     FILE * autocorrelation;
-    snprintf(filename, 64, "./Data/autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.2f_T%0.2f.csv", N, M, rho, T);
     autocorrelation = fopen(filename, "w");
     if (autocorrelation == NULL)
         perror("error while writing on autocorrelation.csv");
@@ -982,6 +982,7 @@ inline bool isApproxEqual(double a, double b)
         return false;
 }
 
+
 int * currentTime()
 {
     time_t now;
@@ -996,41 +997,29 @@ int * currentTime()
     return currenttime;
 }
 
+
 void make_directory(const char* name) 
 {
     struct stat st = {0};
     
     #ifdef __linux__
-       if (stat(name, &st) == -1) { mkdir(name, 777); }
+       if (stat(name, &st) == -1) { mkdir(name, 0777); }
     #else
        _mkdir(name);
     #endif
 }
 
-void rek_mkdir(char *path)
+
+void printPath()
 {
-  char *sep = strrchr(path, '/' );
-  if(sep != NULL) {
-    *sep = 0;
-    rek_mkdir(path);
-    *sep = '/';
-  }
-  if( mkdir(path,0755) && errno != EEXIST )
-    printf("error while trying to create '%s'\n%m\n",path ); 
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        printf("Current working dir: %s\n", cwd);
+    } else {
+        perror("getcwd() error");
+        return 1;
+    }
 }
-
-
-FILE *fopen_mkdir( char *path, char *mode )
-{
-    char *sep = strrchr(path, '/' );
-    if(sep ) { 
-       char *path0 = strdup(path);
-       path0[ sep - path ] = 0;
-       rek_mkdir(path0);
-       free(path0);
-    } 
-    return fopen(path,mode);
-}
-
+    
 
  
