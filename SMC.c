@@ -6,13 +6,12 @@
  * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabile passata a simulation (tipo gather_lapse)
  * energia totale come 1/2 somma delle energie singole?
- * unica stringa per nomi dei file, o ancora meglio distiguerli mettendoli in cartelle specifiche
  * fare grafico di local density in funzione di E legame
- * mettere tutte le funzioni fuori dal main in file separato accessibile anche da SMC_MPI
  * passare anche rank processo e metterlo in tutti i printf
  * in generale fare in modo che noMPI venga trattato come se avesse rank 0
  * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
  * vedere se si può semplificare calcolo distanze da pareti
+ * localDensity con numero minore di divisioni lungo z
  * 
  */
 
@@ -28,7 +27,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 0.1;
+    double A = 0.2;
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
@@ -79,7 +78,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     if (localdensity == NULL)
         perror("error while writing on localdensity.csv");
     
-    fprintf(localdensity, "x, y, z, n\n");
+    fprintf(localdensity, "nx, ny, nz, n\n");
     
     FILE * autocorrelation;
     snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
@@ -120,7 +119,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
             int k = (int)(n/gather_lapse);
             
             P[k] = pressure(R, L, Lz);
-            P[k] += wallsPressure(R, W, L, Lz);
+            //P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
@@ -390,7 +389,7 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m], YM[m]);
+            fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m]+x0m, YM[m]+ymm);
             W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);
             W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);
         }
@@ -781,8 +780,11 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
     memcpy(p, r, 3*N * sizeof(double));
     
     // shift the particles positions by L/2 for convenience
-    for (int j=0; j<3*N; j++)
-        p[j] = p[j] + L/2;
+    for (int n=0; n<N; n++) {
+        p[3*n] = p[3*n] + L/2;
+        p[3*n+1] = p[3*n+1] + L/2;
+        p[3*n+2] = p[3*n+2] + Lz/2;
+    }
     
     int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
