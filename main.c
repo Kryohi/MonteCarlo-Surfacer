@@ -23,7 +23,7 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.21;
+    double T = 0.4;
     //double gamma = 0.5;
     //double dT = 2e-2;
     //double A = gamma*dT;
@@ -51,7 +51,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
+    double x0m = 0.5;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
     double ym = 2.0;        // average bounding energy
     double ymsigma = 0.3;

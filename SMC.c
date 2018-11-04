@@ -23,6 +23,8 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
 {
     // System properties
     double rho = N / (L*L*Lz);
+    double Wmin; // width of the "wall"
+    Wmin = 0.5; // temporaneo, andrebbe calcolato da W
     
     
     // Data-harvesting parameters
@@ -122,7 +124,8 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             P[k] = pressure(R, L, Lz);
             P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
-            boundsCheck(R, L, Lz); // check that all particles are within the box
+            // check that all particles are within the walls TODO: sistemare fattore in modo che sia basato su energia (punto a energia molto alta)
+            boundsCheck(R, L, Lz - 0.75*Wmin );
             
             if (savePositions)  {
                 for (int i=0; i<3*N; i++)
@@ -241,11 +244,14 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         deltaX = Fmx*A/T + displ[3*n];
         deltaY = Fmy*A/T + displ[3*n+1];
         deltaZ = Fmz*A/T + displ[3*n+2];
+        
         Rn[3*n] = R[3*n] + deltaX;
         Rn[3*n+1] = R[3*n+1] + deltaY;
         Rn[3*n+2] = R[3*n+2] + deltaZ;
         
-        shiftSystem3D(Rn, L, Lz);   // verificare che vada bene qui, e che vada messo il 2D e non il 3D
+        Rn[3*n] = Rn[3*n] - L*rint(Rn[3*n]/L);         // verificare che vada bene qui
+        Rn[3*n+1] = Rn[3*n+1] - L*rint(Rn[3*n+1]/L);
+        Rn[3*n+2] = Rn[3*n+2] - Lz*rint(Rn[3*n+2]/Lz);
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
