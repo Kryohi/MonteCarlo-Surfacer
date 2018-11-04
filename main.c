@@ -23,12 +23,12 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.4;
+    double T = 0.33;
     //double gamma = 0.5;
     //double dT = 2e-2;
     //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 0.5*T; // legare a L e temperatura
+    double A = 1.0*T; // legare a L e temperatura
     
     
     // creates data folder and common filename suffix to save data
@@ -51,10 +51,10 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 0.5;       // average width of the wall (distance at which the potential is 0)
+    double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
     double ym = 2.0;        // average bounding energy
-    double ymsigma = 0.3;
+    double ymsigma = 0.4;
     
     // save the wall potentials to a csv file     
     snprintf(filename, 64, "./wall_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);

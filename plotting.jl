@@ -7,6 +7,7 @@ fnt = "helvetica"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,20), tickfont=Plots.font(fnt,12),
  legendfont=Plots.font(fnt,12))
 PyPlot.pygui(true)
+using Plots.PlotMeasures
 #plotlyjs(size=(800,600))
 
 #run(`clang -Wall -lm -lfftw3 -O3 -march=native ./SMC_noMPI.c -o smc`)
@@ -124,7 +125,7 @@ M = 3
 L = 30
 Lz = 70
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.21
+T = 0.33
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -136,7 +137,8 @@ C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
 lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
-#lD[:n] = lD[:n] / length(dfd.E)
+numData = length(dfd.E)
+#lD[:n] = lD[:n] / numData
 
 ## local density plot
 nd = Int(cbrt(length(lD.n)))
@@ -175,26 +177,43 @@ gui()
 
 #l = @layout()
 data = [LD_parz_impilata[:,:,i] for i in [1,2,3,5,6,7]]
-p1 = contourf(X, X, LD_parz_impilata[:,:,1]);
-p2 = contourf(X, X, LD_parz_impilata[:,:,2]);
-p3 = contourf(X, X, LD_parz_impilata[:,:,3]);
-p5 = contourf(X, X, LD_parz_impilata[:,:,5]);
-p6 = contourf(X, X, LD_parz_impilata[:,:,6]);
-p7 = contourf(X, X, LD_parz_impilata[:,:,7]);
+p1 = contourf(X, X, LD_parz_impilata[:,:,1], aspect_ratio=1);
+p2 = contourf(X, X, LD_parz_impilata[:,:,2], aspect_ratio=1);
+p3 = contourf(X, X, LD_parz_impilata[:,:,3], aspect_ratio=1);
+p5 = contourf(X, X, LD_parz_impilata[:,:,5], aspect_ratio=1);
+p6 = contourf(X, X, LD_parz_impilata[:,:,6], aspect_ratio=1);
+p7 = contourf(X, X, LD_parz_impilata[:,:,7], aspect_ratio=1);
 plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
 title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
 
 
 ## wall potential
-wall = zeros(M,M)
+Ebound = zeros(M,M)
+WallWidth = zeros(M,M)
+A = zeros(M,M)
+B = zeros(M,M)
 for i = 0:M-1
     for j = 0:M-1
-        wall[i+1, j+1] = dfw.ymin[findfirst( (dfw.nx .== i) .& (dfw.ny .== j) )]
+        Ebound[i+1,j+1] = dfw.ymin[findfirst( (dfw.nx .== i) .& (dfw.ny .== j) )]
+        WallWidth[i+1,j+1] = dfw.x0[findfirst( (dfw.nx .== i) .& (dfw.ny .== j) )]
+        A[i+1,j+1] = (WallWidth[i+1,j+1])^12* Ebound[i+1,j+1]
+        B[i+1,j+1] = (WallWidth[i+1,j+1])^6* Ebound[i+1,j+1]
+    end
+end
+www = (A./B).^(1/6)
+eee = B.^2 ./ A
+xrange = 0.0:0.001:3
+w1 = plot(xrange, xrange.^0 .-1, xaxis=("x", (xrange[1], xrange[end])), yaxis=("V", (-2.5, 4)), reuse=false)
+
+for i = 1:M
+    for j = 1:M
+        plot!(w1, xrange, 4 .* (A[i,j].*xrange.^-12 - B[i,j].*xrange.^-6))
     end
 end
 
+
 W = LinRange(-L/2, L/2, M)
-contour(W, W, wall, fill=true, reuse=false)
+contour(W, W, Ebound, fill=true, reuse=false)
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))

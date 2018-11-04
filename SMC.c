@@ -24,7 +24,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     // System properties
     double rho = N / (L*L*Lz);
     double Wmin; // width of the "wall"
-    Wmin = 0.5; // temporaneo, andrebbe calcolato da W
+    Wmin = 1.0; // TODO, andrebbe calcolato da W
     
     
     // Data-harvesting parameters
@@ -125,7 +125,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             // check that all particles are within the walls TODO: sistemare fattore in modo che sia basato su energia (punto a energia molto alta)
-            boundsCheck(R, L, Lz - 0.75*Wmin );
+            boundsCheck(R, L, Lz - 0.5*Wmin );
             
             if (savePositions)  {
                 for (int i=0; i<3*N; i++)
@@ -251,7 +251,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         
         Rn[3*n] = Rn[3*n] - L*rint(Rn[3*n]/L);         // verificare che vada bene qui
         Rn[3*n+1] = Rn[3*n+1] - L*rint(Rn[3*n+1]/L);
-        Rn[3*n+2] = Rn[3*n+2] - Lz*rint(Rn[3*n+2]/Lz);
+        Rn[3*n+2] = Rn[3*n+2] - Lz*rint(Rn[3*n+2]/Lz);  // serve o fa danni?
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
@@ -401,8 +401,8 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
         for (int j=0; j<M; j++) {
             int m = j + i*M;
             fprintf(wall, "%d, %d, %f, %f\n", i, j, X0[m]+x0m, YM[m]+ymm);
-            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm)*(YM[m]+ymm);     // a
-            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);                // b
+            W[2*m] = pow(X0[m]+x0m, 12.) * (YM[m]+ymm);     // a
+            W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);    // b
         }
     }
     
@@ -458,7 +458,7 @@ inline void boundsCheck(double *r, double L, double Lz)
 {
     for (int j=0; j<N; j++) {
         if ((fabs(r[3*j]) > L/2) || (fabs(r[3*j+1]) > L/2) || (fabs(r[3*j+2]) > Lz/2))
-            perror("Particles are escaping the system and going to the beta-carotene Valhalla");
+            printf("Particles are escaping the system and going to the beta-carotene Valhalla\n");
     }
 }
 
