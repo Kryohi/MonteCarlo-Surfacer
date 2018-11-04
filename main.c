@@ -23,7 +23,13 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.23;
+    double T = 0.16;
+    //double gamma = 0.5;
+    //double dT = 2e-2;
+    //double A = gamma*dT;
+    //double s = sqrt(4*A*D)/dT;
+    double A = 7.0; // legare a L e tempearatura
+    
     
     // creates data folder and common filename suffix to save data
     make_directory("Data");
@@ -92,7 +98,7 @@ int main(int argc, char** argv)
         
     struct Sim MC1;
     
-    MC1 = sMC(L, Lz, T, W, R0, maxsteps, gather_lapse, eqsteps);
+    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps);
     
     
     printf("\n###  Final results  ###");

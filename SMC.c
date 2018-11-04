@@ -19,19 +19,15 @@
 #include "SMC.h"
 
 
-struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
+struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
 {
     // System properties
     double rho = N / (L*L*Lz);
-    //double gamma = 0.5;
-    //double dT = 2e-2;
-    //double A = gamma*dT;
-    //double s = sqrt(4*A*D)/dT;
-    double A = 8.0; // legare a L e tempearatura
+    
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 500000;
+    int kmax = 1000000; // maximum autocorrelation distance
     int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
 
     
@@ -120,7 +116,7 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
             int k = (int)(n/gather_lapse);
             
             P[k] = pressure(R, L, Lz);
-            //P[k] += wallsPressure(R, W, L, Lz);
+            P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
             
             for (int i=0; i<3*N; i++)
@@ -178,13 +174,12 @@ struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0,
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps);
-    results.dE = sqrt(variance_corr(E, tau, maxsteps));
+    results.dE = sqrt(variance(E, maxsteps));
     results.P = mean(P, gather_steps);
     results.dP = sqrt(variance(P, gather_steps));
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = tau;// * gather_lapse;
-    results.cv = variance_corr(E, tau, maxsteps) / (T*T);
-    printf("tau_noncorr = %f \n", variance(E, maxsteps) / (T*T));
+    results.cv = variance(E, maxsteps) / (T*T);
     
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
     
@@ -275,7 +270,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             Rn[3*n+2] = R[3*n+2];
         }
     }
-
+    boundsCheck(R, L, Lz);
     free(displ);
 }
 
@@ -442,6 +437,14 @@ inline void shiftSystem2D(double *r, double L)
     for (int j=0; j<N; j++) {
         r[3*j] = r[3*j] - L*rint(r[3*j]/L);
         r[3*j+1] = r[3*j+1] - L*rint(r[3*j+1]/L);
+    }
+}
+
+inline void boundsCheck(double *r, double L, double Lz)
+{
+    for (int j=0; j<N; j++) {
+        if ((fabs(r[3*j]) > L/2) || (fabs(r[3*j+1]) > L/2) || (fabs(r[3*j+2]) > Lz/2))
+            perror("Particles are escaping the system and going to the beta-carotene Valhalla");
     }
 }
 
@@ -633,9 +636,9 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
     for (int i=0; i<M; i++) {
         for (int j=0; j<M; j++) {
             int m = j + i*M;
-            dx = rx - i*dw - dw/2;
+            dx = rx - i*dw;// - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw - dw/2;
+            dy = ry - j*dw;// - dw/2;
             dy = dy - L*rint(dy/L);
             dz = rz + Lz/2;
             dz = dz - Lz*rint(dz/Lz);
@@ -670,9 +673,9 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
         for (int j=0; j<M; j++) 
         {
             int m = j + i*M;
-            dx = rx - i*dw - dw/2;
+            dx = rx - i*dw;// - dw/2;
             dx = dx - L*rint(dx/L);
-            dy = ry - j*dw - dw/2;
+            dy = ry - j*dw;// - dw/2;
             dy = dy - L*rint(dy/L);
             // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
             // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
@@ -714,9 +717,9 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw - dw/2;
+                dx = r[3*n] - i*dw;// - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw - dw/2;
+                dy = r[3*n+1] - j*dw;// - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + Lz/2;
                 dz = dz - Lz*rint(dz/Lz);
@@ -747,9 +750,9 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
             int m = j + i*M;
             for (int n=0; n<N; n++)  
             {
-                dx = r[3*n] - i*dw - dw/2;
+                dx = r[3*n] - i*dw;// - dw/2;
                 dx = dx - L*rint(dx/L);
-                dy = r[3*n+1] - j*dw - dw/2;
+                dy = r[3*n+1] - j*dw;// - dw/2;
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + L/2;
                 dz = dz - Lz*rint(dz/Lz);

@@ -1,7 +1,7 @@
 using Statistics, CSVFiles, DataFrames, Printf, PyCall, ProgressMeter, FFTW
 pygui(:qt); import PyPlot: pygui
 using Plots, StatPlots
-pygui(:qt); :qt
+pygui(:qt)
 pyplot(size=(800, 600))
 fnt = "helvetica"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
@@ -124,7 +124,7 @@ M = 3
 L = 30
 Lz = 70
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.2
+T = 0.22
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -165,33 +165,37 @@ for n = 1:7
     z_distr[n] = sum(LD_parz_impilata[:,:,n])
 end
 
+X = LinRange(-L/2, L/2, nd)
 
-heatmap(LD_impilata, reuse=false)
-heatmap(LD_parz_impilata[:,:,7], reuse=false)
+contour(X, X, LD_impilata, fill=true, reuse=false)
+contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
 gui()
 
-nw = M
-wall = zeros(nw,nw)
-for i = 0:nw-1
-    for j = 0:nw-1
+wall = zeros(M,M)
+for i = 0:M-1
+    for j = 0:M-1
         wall[i+1, j+1] = dfw.ymin[findfirst( (dfw.nx .== i) .& (dfw.ny .== j) )]
     end
 end
 
-heatmap(wall, reuse=false)
+W = LinRange(-L/2, L/2, M)
+contour(W, W, wall, fill=true, reuse=false)
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
 X0 = [dfp[1, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, L=L, Lz=Lz, T=T, reuse=false)
 
-make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T, reuse=false)
-
-
-## Check energy
-Plots.plot(dfd.E[1:100:end], reuse=false, legend=false)
+make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T)
 gui()
-plot(C_H[1][1:50000], legend=false)
+
+
+## Check energy, pressure and ar
+Plots.plot(dfd.E[1:10:end], linewidth=0.5, reuse=false, legend=false)
+Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
+Plots.plot(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
+gui()
+plot(C_H[1][1:500000], legend=false)
 kmax = round(Int, length(dfd.E)/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)),
  yaxis = (:log10, (1,Inf)))
