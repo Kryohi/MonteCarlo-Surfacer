@@ -29,7 +29,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     int gather_steps = (int)(maxsteps/gather_lapse);
     int kmax = 1000000; // maximum autocorrelation distance
     int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
-
+    bool savePositions = true;
     
     clock_t start, end;
     double sim_time;
@@ -122,11 +122,14 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             P[k] = pressure(R, L, Lz);
             P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
+            boundsCheck(R, L, Lz); // check that all particles are within the box
             
-            for (int i=0; i<3*N; i++)
-                fprintf(positions, "%0.4lf,", R[i]);    // provare %6g
+            if (savePositions)  {
+                for (int i=0; i<3*N; i++)
+                    fprintf(positions, "%0.4lf,", R[i]);    // provare %6g
 
-            fprintf(positions, "\n");
+                fprintf(positions, "\n");
+            }
         }
         
         E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
@@ -275,7 +278,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             Rn[3*n+2] = R[3*n+2];
         }
     }
-    boundsCheck(R, L, Lz);
+    
     free(displ);
 }
 

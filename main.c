@@ -53,7 +53,7 @@ int main(int argc, char** argv)
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
-    double ym = 1.8;        // average bounding energy
+    double ym = 2.0;        // average bounding energy
     double ymsigma = 0.3;
     
     // save the wall potentials to a csv file     
