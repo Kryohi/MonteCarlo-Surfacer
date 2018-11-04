@@ -4,8 +4,8 @@ using Plots, StatPlots
 pygui(:qt)
 pyplot(size=(800, 600))
 fnt = "helvetica"
-default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,24), tickfont=Plots.font(fnt,14),
- legendfont=Plots.font(fnt,14))
+default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,20), tickfont=Plots.font(fnt,12),
+ legendfont=Plots.font(fnt,12))
 PyPlot.pygui(true)
 #plotlyjs(size=(800,600))
 
@@ -124,7 +124,7 @@ M = 3
 L = 30
 Lz = 70
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.22
+T = 0.18
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -148,13 +148,13 @@ for i = 0:nd-1
         v = i*nd*nd + j*nd;
         LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
 
-        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:2) ]);
-        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (3:5) ]);
-        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (5:7) ]);
-        LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (8:22) ]);
-        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (23:25) ]);
-        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (26:28) ]);
-        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (29:30) ]);
+        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:3) ]);
+        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (4:6) ]);
+        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (7:9) ]);
+        LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (10:21) ]);
+        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (22:24) ]);
+        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (25:27) ]);
+        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (28:30) ]);
         #LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j)
         #  .& ( (lD.nz .== 2) .| (lD.nz .== 3) | (lD.nz .== 4) )]);
     end
@@ -171,6 +171,21 @@ contour(X, X, LD_impilata, fill=true, reuse=false)
 contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
 gui()
 
+## tentativo di mettere insieme subplots
+
+#l = @layout()
+data = [LD_parz_impilata[:,:,i] for i in [1,2,3,5,6,7]]
+p1 = contourf(X, X, LD_parz_impilata[:,:,1]);
+p2 = contourf(X, X, LD_parz_impilata[:,:,2]);
+p3 = contourf(X, X, LD_parz_impilata[:,:,3]);
+p5 = contourf(X, X, LD_parz_impilata[:,:,5]);
+p6 = contourf(X, X, LD_parz_impilata[:,:,6]);
+p7 = contourf(X, X, LD_parz_impilata[:,:,7]);
+plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
+title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
+
+
+## wall potential
 wall = zeros(M,M)
 for i = 0:M-1
     for j = 0:M-1
@@ -195,7 +210,7 @@ Plots.plot(dfd.E[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.plot(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
-plot(C_H[1][1:500000], legend=false)
+plot(C_H[1][1:10:1000000], legend=false)
 kmax = round(Int, length(dfd.E)/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)),
  yaxis = (:log10, (1,Inf)))
@@ -205,3 +220,6 @@ gui()
 #acffast = fft_acf(dfd.E, 5000)
 #tausimple = sum(acfsimple)
 #tau = sum(acffast)
+
+
+# a T 0.18 quasi tutte sulla superficie

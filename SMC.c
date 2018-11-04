@@ -86,8 +86,11 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     fprintf(autocorrelation, "CH\n");
     
     
+    
     /*  Thermalization   */
-
+    
+    A = A*3;    // to help the fluid reaching the equilibrium a bigger A is used, because the particles start far away from the walls.
+    
     start = clock();
     for (int n=0; n<eqsteps; n++)
     {
@@ -99,6 +102,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     printf("\nThermalization completed in %0.1f s with ", sim_time);
     printf("average acceptance ratio %0.3f, mean energy %0.3f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
+    A = A/3;
     
     for (int n=0; n<eqsteps; n++)
         jj[n] = 0;
@@ -166,11 +170,12 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     double tau = sum(acf,kmax);
     //simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
     //printf("TauSimple: %f \n", tau);
+
     
     for (int m=0; m<kmax; m++)
       fprintf(autocorrelation, "%0.6lf\n", acf[m]);
     
-
+    //printf("\n2\n");
     // Create struct of the mean values and deviations to return
     struct Sim results;
     results.E = mean(E, maxsteps);
@@ -180,14 +185,14 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     results.acceptance_ratio = intmean(jj, maxsteps)/N;
     results.tau = tau;// * gather_lapse;
     results.cv = variance(E, maxsteps) / (T*T);
-    
+    //printf("\n3\n");
     memcpy(results.Rfinal, R, 3*N * sizeof(double));
-    
+    //printf("\n4\n");
     struct DoubleArray ACF; // capire come allocare la memoria nel modo giusto
     ACF.length = kmax;
     ACF.data = acf;
     results.ACF = ACF;
-
+    //printf("\n5\n");
     // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(acf); free(lD);
     fclose(positions); fclose(data); fclose(autocorrelation); fclose(localdensity);
