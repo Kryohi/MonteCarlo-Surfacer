@@ -11,7 +11,7 @@ int main(int argc, char** argv)
     // variables common to the simulations in every process
     int maxsteps = 24000000;
     int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 6000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 10000000;       // number of steps for the equilibrium pre-simulation
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
@@ -23,7 +23,13 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.23;
+    double T = 0.21;
+    //double gamma = 0.5;
+    //double dT = 2e-2;
+    //double A = gamma*dT;
+    //double s = sqrt(4*A*D)/dT;
+    double A = 0.5*T; // legare a L e temperatura
+    
     
     // creates data folder and common filename suffix to save data
     make_directory("Data");
@@ -47,7 +53,7 @@ int main(int argc, char** argv)
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
     double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
-    double ym = 1.8;        // average bounding energy
+    double ym = 2.0;        // average bounding energy
     double ymsigma = 0.3;
     
     // save the wall potentials to a csv file     
@@ -92,7 +98,7 @@ int main(int argc, char** argv)
         
     struct Sim MC1;
     
-    MC1 = sMC(L, Lz, T, W, R0, maxsteps, gather_lapse, eqsteps);
+    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps);
     
     
     printf("\n###  Final results  ###");

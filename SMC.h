@@ -24,7 +24,7 @@
 #define M 3
 
 // number of particles:
-#define N 108
+#define N 32
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
@@ -53,7 +53,7 @@ typedef struct Sim {    // struct containing all the useful results of one simul
 
 
 
-struct Sim sMC(double L, double Lz, double T, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps);
+struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps);
 void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double * r, double L);
 void shiftSystem2D(double * r, double L);
@@ -75,6 +75,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz);
 double wallsPressure(const double *r, const double * W, double L, double Lz);
 void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D);
+void boundsCheck(double *r, double L, double Lz);
 
 void simple_acf(const double *H, size_t length, int k_max, double * acf);
 void fft_acf(const double *H, size_t length, int k_max, double * acf);
