@@ -9,13 +9,13 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 24000000;
+    int maxsteps = 18000000;
     int gather_lapse = (int) maxsteps/200000;     // number of steps between each acquisition of data
-    int eqsteps = 10000000;       // number of steps for the equilibrium pre-simulation
+    int eqsteps = 4000000;       // number of steps for the equilibrium pre-simulation
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
-        L = 30; // 16, 28
+        L = 34; // 30, 70
         Lz = 70;
     #else
         L = 60;
@@ -23,12 +23,11 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.33;
-    //double gamma = 0.5;
+    double T = 0.42;
+    double gamma = 0.7;
     //double dT = 2e-2;
-    //double A = gamma*dT;
     //double s = sqrt(4*A*D)/dT;
-    double A = 1.0*T; // legare a L e temperatura
+    double A = gamma*T; // legata a L?
     
     
     // creates data folder and common filename suffix to save data
@@ -77,7 +76,7 @@ int main(int argc, char** argv)
    
     snprintf(filename, 64, "./last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     
-    if (access( filename, F_OK ) != -1) 
+    if (access( filename, F_OK ) != -1 && 42==69) 
     {
         printf("\nUsing previously saved particle configuration...\n");
         FILE * last_state;
@@ -89,7 +88,7 @@ int main(int argc, char** argv)
     
     } else {
         printf("\nInitializing system...\n");
-        initializeBox(L, Lz, N, R0); // da sostituire con cavity?
+        initializeBox(L, Lz, N, R0);
     }
     
     
@@ -110,6 +109,22 @@ int main(int argc, char** argv)
     printf("\n");
     
     
+    /* Save data and free variables and files */
+    FILE * info;
+    snprintf(filename, 64, "./info_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
+    info = fopen(filename, "w");
+    fprintf(info, "\nBox dimensions: %0.1f * %0.1f * %0.1f", (double)L, (double)L, (double)Lz);
+    fprintf(info, "\nParticle density: %0.4f", N / (L*L*Lz));
+    fprintf(info, "\nAverage interparticle distance: ~%0.3f", cbrt((L*L*Lz)/N)/2);
+    fprintf(info, "\nWall elements distance / interparticle distance: ~%0.3f", (L/M) / (cbrt((L*L*Lz)/N)) / 2);
+    fprintf(info, "\nA used: %0.3f (%0.3f * kT)", A, gamma);
+    fprintf(info, "\nMean energy: %f ± %f", MC1.E, MC1.dE);
+    fprintf(info, "\nMean pressure: %f ± %f", MC1.P, MC1.dP);
+    fprintf(info, "\nApproximate heat capacity: %f", MC1.cv);
+    fprintf(info, "\nAverage autocorrelation time: %f", MC1.tau);
+    fprintf(info, "\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
+
+    
     // save the last position of every particle, to use in a later run
     FILE * last_state;
     snprintf(filename, 64, "./last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
@@ -120,7 +135,7 @@ int main(int argc, char** argv)
     for (int i=0; i<3*N; i++)
         fprintf(last_state, "%0.12f,", MC1.Rfinal[i]);
     
-    fclose(last_state); fclose(wall);
+    fclose(last_state); fclose(wall); fclose(info);
     free(R0); free(W);
     
     return 0;

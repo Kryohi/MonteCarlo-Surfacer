@@ -29,9 +29,11 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 1000000; // maximum autocorrelation distance
+    int kmax = 2000000; // maximum autocorrelation distance
     int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
+    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
     bool savePositions = true;
+    if (gather_steps > 200000)  { savePositions = false; printf("puntual positions will not be saved"); }
     
     clock_t start, end;
     double sim_time;
@@ -47,8 +49,10 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     double * Rn = calloc(3*N, sizeof(double)); // contains the proposed particle positions
     double * E = calloc(maxsteps, sizeof(double));
     double * P = calloc(gather_steps, sizeof(double));
-    int * jj = calloc(maxsteps, sizeof(int)); // usare solo in termalizzazione?
+    int * jj = calloc(maxsteps, sizeof(int));   
+    int * jt = calloc(eqsteps, sizeof(int)); // per termalizzazione
     unsigned long * lD = calloc(Nv, sizeof(unsigned long));
+    unsigned long * lD_old = calloc(Nv, sizeof(unsigned long));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
 
@@ -79,6 +83,14 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     fprintf(localdensity, "nx, ny, nz, n\n");
     
+    FILE * localdensity_temp;
+    snprintf(filename, 64, "./localdensity_temp_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
+    localdensity_temp = fopen(filename, "w");
+    if (localdensity_temp == NULL)
+        perror("error while writing on localdensity_temp.csv");
+    
+    fprintf(localdensity_temp, "nx, ny, nz, n\n");
+    
     FILE * autocorrelation;
     snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     autocorrelation = fopen(filename, "w");
@@ -91,24 +103,23 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     /*  Thermalization   */
     
-    A = A*3;    // to help the fluid reaching the equilibrium a bigger A is used, because the particles start far away from the walls.
-    
+    A = A*2;    // to help the fluid reaching the equilibrium a bigger A is used, because the particles start far away from the walls.
     start = clock();
+    
     for (int n=0; n<eqsteps; n++)
     {
         E[n] = energy(R, L);
-        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
+        E[n] += wallsEnergy(R, W, L, Lz);
+        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jt[n]);
     }
+    
     end = clock();
     sim_time = ((double) (end - start)) / CLOCKS_PER_SEC;
-    
-    printf("\nThermalization completed in %0.1f s with ", sim_time);
-    printf("average acceptance ratio %0.3f, mean energy %0.3f.\n", intmean(jj,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
-    A = A/3;
-    
-    for (int n=0; n<eqsteps; n++)
-        jj[n] = 0;
-    
+    int *now = currentTime();
+    printf("\nThermalization completed in %0.1f mins at %02d:%02d, with ", sim_time/60, now[0], now[1]);
+    printf("average acceptance ratio %0.3f, mean energy %0.3f.\n", intmean(jt,eqsteps)/N, mean(E,eqsteps)+3*N*T/2);
+    A = A/2;
+        
     
     
     /*  Actual simulation   */
@@ -124,12 +135,25 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             P[k] = pressure(R, L, Lz);
             P[k] += wallsPressure(R, W, L, Lz);
             localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
-            // check that all particles are within the walls TODO: sistemare fattore in modo che sia basato su energia (punto a energia molto alta)
-            boundsCheck(R, L, Lz - 0.5*Wmin );
+            // check that all particles are within the walls TODO: sistemare Lz in modo che sia basato su energia (punto a energia molto alta)
+            boundsCheck(R, L, Lz -0.01);
+            
+            if (k % 10000 == 0 && k != 0)  { // dump of the local density in the last million or so steps
+                printf("Storing the latest density distribution at %d million steps...\n", (int)(n/1000000));
+                for (int i=0; i<Nl; i++)    {
+                    for (int j=0; j<Nl; j++)    {
+                        for (int k=0; k<Nl; k++)    {
+                            int v = i*Nl*Nl + j*Nl + k;
+                            fprintf(localdensity_temp, "%d, %d, %d, %lu\n", i, j, k, lD[v] - lD_old[v]);
+                        }
+                    }
+                }
+                memcpy(lD_old, lD, Nv * sizeof(unsigned long)); // save the current localDensity cumulative number
+            }
             
             if (savePositions)  {
                 for (int i=0; i<3*N; i++)
-                    fprintf(positions, "%0.4lf,", R[i]);    // provare %6g
+                    fprintf(positions, "%0.3lf,", R[i]);    // provare %6g
 
                 fprintf(positions, "\n");
             }
@@ -160,7 +184,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     for (int k=0; k<gather_steps; k++)
         fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
     
-    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
+    
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
@@ -172,7 +196,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
 
     // autocorrelation calculation
-    fft_acf(E, maxsteps, kmax, acf);
+    //fft_acf(E, maxsteps, kmax, acf);
     double tau = sum(acf,kmax);
     //simple_acf(E, maxsteps, kmax, acf2);    // da eliminare dopo aver confrontato
     //printf("TauSimple: %f \n", tau);
@@ -200,7 +224,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     results.ACF = ACF;
     //printf("\n5\n");
     // free the allocated memory
-    free(R); free(Rn); free(E); free(P); free(jj); free(acf); free(lD);
+    free(R); free(Rn); free(E); free(P); free(jj); free(jt); free(acf); free(lD);
     fclose(positions); fclose(data); fclose(autocorrelation); fclose(localdensity);
 
     return results;
@@ -230,7 +254,8 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
     
     for (int nn=0; nn<N; nn++)
     {
-        n = (nn+offset)%N;
+        //n = (nn+offset)%N;
+        n = nn;
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
@@ -338,7 +363,7 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 /*
  * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
  * with the shape of a cube with L = cbrt(V)
-*/ //TODO vedere se è meglio usare az e allungare reticolo
+*/ //TODO vedere se è meglio usare az e allungare reticolo. Also più flessibilità nel numero particelle
 
 void initializeBox(double L, double Lz, int N_, double *X) 
 {
@@ -372,10 +397,13 @@ void initializeBox(double L, double Lz, int N_, double *X)
         }
     }
 
-    for (int n=0; n<3*N; n++)
-        X[n] += a/4;   // needed to avoid particles exactly at the edges of the box
+    for (int n=0; n<N; n++) {    // needed to avoid particles exactly at the edges of the box
+        X[3*n] += a/4;
+        X[3*n+1] += a/4;  
+        X[3*n+2] += a/4;
+    }
 
-    shiftSystem3D(X,L,Lz);
+    shiftSystem3D(X,L,L);   // uses L instead of Lz in order to put the lattice at the center of the box
 }
 
 
@@ -388,6 +416,9 @@ void initializeBox(double L, double Lz, int N_, double *X)
 
 void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, double *W, FILE * wall)    
 {
+    //srand(time(NULL));  // necessary because initializeWalls gets called in main, 
+    //otherwise the walls are always the same
+    
     double * X0 = malloc(M*M * sizeof(double));
     double * YM = malloc(M*M * sizeof(double));
     
@@ -405,7 +436,6 @@ void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, dou
             W[2*m+1] = pow(X0[m]+x0m, 6.) * (YM[m]+ymm);    // b
         }
     }
-    
     
     free(X0); free(YM);
 }
@@ -454,12 +484,20 @@ inline void shiftSystem2D(double *r, double L)
     }
 }
 
-inline void boundsCheck(double *r, double L, double Lz)
+inline int boundsCheck(double *r, double L, double Lz)
 {
+    int out = 0;
     for (int j=0; j<N; j++) {
-        if ((fabs(r[3*j]) > L/2) || (fabs(r[3*j+1]) > L/2) || (fabs(r[3*j+2]) > Lz/2))
+        if ((fabs(r[3*j]) > L/2) || (fabs(r[3*j+1]) > L/2))
+        {
             printf("Particles are escaping the system and going to the beta-carotene Valhalla\n");
+            out++;
+        }
+        else if (fabs(r[3*j+2]) > Lz/2) {
+            printf("Particles are smashing the walls :(\n");
+        }
     }
+    return out;
 }
 
 
@@ -505,7 +543,7 @@ double energySingle(const double *r, double L, int i)
 /*
  * Calculate the forces acting on particle i due to the interaction with other particles
  * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
-*/
+*/  // TODO segni da ricontrollare per l'ennesima volta
 
 void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
 {
@@ -518,20 +556,20 @@ void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, doubl
     {
          if (l != i)   
          {
-            dx = r[3*l] - r[3*i];
+            dx = r[3*i] - r[3*l];
             dx = dx - L*rint(dx/L);
-            dy = r[3*l+1] - r[3*i+1];
+            dy = r[3*i+1] - r[3*l+1];
             dy = dy - L*rint(dy/L);
-            dz = r[3*l+2] - r[3*i+2];
+            dz = r[3*i+2] - r[3*l+2];
             //dz = dz - Lz*rint(dz/Lz); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
             if (dr2 < L*L/4)
             {
                 dr8 = dr2*dr2*dr2*dr2;
-                dV = 24.0/dr8 - 48.0/(dr8*dr2*dr2*dr2);
-                *Fx -= dV*dx;
-                *Fy -= dV*dy;
-                *Fz -= dV*dz;
+                dV = 48.0/(dr8*dr2*dr2*dr2) - 24.0/dr8 ;    // -(dV/dr) / dr
+                *Fx += dV*dx;   // se si devono attrarre (-dV) è negativo 
+                *Fy += dV*dy;
+                *Fz += dV*dz;
             }
         }
     }
@@ -675,7 +713,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
  * Be careful, it doesn't initialize F to zero, it only adds.
  * 
 */
-// sentire forza da tutti i segmenti? Solo quelli più vicini?
+// TODO ricontrollare segni, di nuovo
 
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz) 
 { 
@@ -702,10 +740,10 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
             if (dr2 < L*L/4)
             {
                 dr8 = dr2*dr2*dr2*dr2;
-                dV = 24.0 * W[2*m+1] / dr8 - 48.0 * W[2*m] / (dr8*dr2*dr2*dr2);
-                *Fx -= dV*dx;
-                *Fy -= dV*dy;
-                *Fz -= dV*dz;
+                dV = 48.0 * W[2*m] / (dr8*dr2*dr2*dr2) - 24.0 * W[2*m+1] / dr8; //(-dV/dr)/r
+                *Fx += dV*dx;
+                *Fy += dV*dy;
+                *Fz += dV*dz;
             }
         }
     }
@@ -844,23 +882,23 @@ void fft_acf(const double *H, size_t length, int k_max, double * acf)
     
     fftw_plan p;
     fftw_complex *fvi, *C_H, *temp;
-    int lfft = (int)(length/2)+1;
+    int lfft = (int)(length/2) + length%2;
     double * Z = fftw_malloc(length * sizeof(double));
-    fvi = fftw_malloc(lfft * sizeof(fftw_complex));
-    temp = fftw_malloc(lfft * sizeof(fftw_complex));
-    C_H = fftw_malloc(lfft * sizeof(fftw_complex));
+    fvi = fftw_malloc(length * sizeof(fftw_complex));
+    temp = fftw_malloc(length * sizeof(fftw_complex));
+    C_H = fftw_malloc(length * sizeof(fftw_complex));
     
     double meanH = mean(H, length);
     for (int i=0; i<length; i++)
         Z[i] = H[i] - meanH;
 
-    p = fftw_plan_dft_r2c_1d(lfft, Z, fvi, FFTW_ESTIMATE);
+    p = fftw_plan_dft_r2c_1d(length, Z, fvi, FFTW_ESTIMATE);    // length o lfft?
     fftw_execute(p);
 
     for (int i=0; i<lfft; i++)  // compute the abs2 of the transform (power spectral density of Z)
         temp[i] = fvi[i] * conj(fvi[i]) + 0.0I;
     
-    p = fftw_plan_dft_1d(lfft, temp, C_H, FFTW_BACKWARD, FFTW_ESTIMATE);
+    p = fftw_plan_dft_1d(length, temp, C_H, FFTW_BACKWARD, FFTW_ESTIMATE);
     fftw_execute(p);
 
     for (int i=0; i<k_max; i++)

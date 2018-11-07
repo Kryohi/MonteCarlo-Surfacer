@@ -3,7 +3,7 @@ pygui(:qt); import PyPlot: pygui
 using Plots, StatPlots
 pygui(:qt)
 pyplot(size=(800, 600))
-fnt = "helvetica"
+fnt = "overpass-regular"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,20), tickfont=Plots.font(fnt,12),
  legendfont=Plots.font(fnt,12))
 PyPlot.pygui(true)
@@ -14,8 +14,8 @@ using Plots.PlotMeasures
 #run(`./smc`)
 
 
-function make3Dplot(A::Array{Float64,1}; T = -1.0, L = -1.0, Lz = -1.0, reuse=true)
-    #Plots.default(size=(800,600))
+function make3Dplot(A::Array{Float64,1}; T = -1.0, L = -1.0, Lz = -1.0, surface=true, we=zeros(3,3), reuse=true)
+
     N = Int(length(A)/3)
     if L == -1.0
         Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue,Plots.stroke(0)),
@@ -24,23 +24,18 @@ function make3Dplot(A::Array{Float64,1}; T = -1.0, L = -1.0, Lz = -1.0, reuse=tr
         Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
          w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)), leg=false, reuse=reuse)
     end
-end
-
-function make3Dplot(M::DataFrame, n1, n2; T = -1.0, L = -1.0, Lz = -1.0, reuse=true)
-
-    N = Int((size(M,2)-1)/3)
-    A = [dfp[1, col] for col in 1:3N] # subset of columns
-    Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
-    w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)),
-    leg=false)
-
-    for n ∈ n1+1:n2
-        A = [dfp[n, col] for col in 1:3N] # subset of columns
-        Plots.scatter3d!(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
-        w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)),
-        leg=false)
+    if surface
+        x = LinRange(-L/2, L/2, 3)
+        y = x
+        surface!( [ (x[1],y[1],-Lz/2+1), (x[2],y[2],-Lz/2+1), (x[3],y[3],-Lz/2+1),
+        (x[2],y[1],-Lz/2+1), (x[1],y[2],-Lz/2+1), (x[1],y[3],-Lz/2+1),
+        (x[3],y[1],-Lz/2+1), (x[2],y[3],-Lz/2+1), (x[3],y[2],-Lz/2+1) ] )
+        surface!( [ (x[1],y[1],Lz/2-1), (x[2],y[2],Lz/2-1), (x[3],y[3],Lz/2-1),
+        (x[2],y[1],Lz/2-1), (x[1],y[2],Lz/2-1), (x[1],y[3],Lz/2-1),
+        (x[3],y[1],Lz/2-1), (x[2],y[3],Lz/2-1), (x[3],y[2],Lz/2-1) ] )
     end
 end
+
 
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, L = -1.0, Lz = -1.0, save=true, reuse=true)
     #Plots.default(size=(800,600))
@@ -119,13 +114,16 @@ function acf_spectrum(H::Array{Float64,1}, k_max::Int)
     return acf[1:k_max]
 end
 
+mass_mol = 536.438          # g/mol
+mass = mass_mol / 6.022e23  # g
 
-N = 32
+N = 108
 M = 3
-L = 30
-Lz = 70
+L = 60#30
+Lz = 100#70
+gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.33
+T = 0.42
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -137,8 +135,9 @@ C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
 lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
-numData = length(dfd.E)
+gather_length = length(dfd.E)
 #lD[:n] = lD[:n] / numData
+
 
 ## local density plot
 nd = Int(cbrt(length(lD.n)))
@@ -167,11 +166,10 @@ for n = 1:7
     z_distr[n] = sum(LD_parz_impilata[:,:,n])
 end
 
-X = LinRange(-L/2, L/2, nd)
+X = LinRange(-L/2, L/2, nd);
 
 contour(X, X, LD_impilata, fill=true, reuse=false)
-contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
-gui()
+#contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
 
 ## tentativo di mettere insieme subplots
 
@@ -200,39 +198,55 @@ for i = 0:M-1
         B[i+1,j+1] = (WallWidth[i+1,j+1])^6* Ebound[i+1,j+1]
     end
 end
-www = (A./B).^(1/6)
-eee = B.^2 ./ A
-xrange = 0.0:0.001:3
-w1 = plot(xrange, xrange.^0 .-1, xaxis=("x", (xrange[1], xrange[end])), yaxis=("V", (-2.5, 4)), reuse=false)
 
-for i = 1:M
-    for j = 1:M
-        plot!(w1, xrange, 4 .* (A[i,j].*xrange.^-12 - B[i,j].*xrange.^-6))
-    end
-end
+X0 = [dfp[67000, col] for col in 1:3N] # subset of columns
+make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
 
+x = y = range(-5, stop = 5, length = 40)
+f(x,y) = sin(x + 10sin(4)) + cos(y)
+l = @layout [a{0.7w} b; c{0.2h}]
+p = plot(x, y, f, st = [:surface, :contourf], layout=l)
+
+
+# xrange = 0.0:0.001:3
+# w1 = plot(xrange, xrange.^0 .-1, xaxis=("x", (xrange[1], xrange[end])), yaxis=("V", (-2.5, 4)), reuse=false)
+# for i = 1:M
+#     for j = 1:M
+#         plot!(w1, xrange, 4 .* (A[i,j].*xrange.^-12 - B[i,j].*xrange.^-6))
+#     end
+# end
 
 W = LinRange(-L/2, L/2, M)
-contour(W, W, Ebound, fill=true, reuse=false)
+contour(W, W, Ebound, fill=true, reuse=true, legend=true)
+
+
+## Ebound - Condensed particles
+approx_ratio = (sum(LD_parz_impilata[:,:,1])+sum(LD_parz_impilata[:,:,7]))/sum(LD_parz_impilata[:,:,2:end-1])
+#first thing to do is finding the LD boxes corresponding to the wall potential
+
+# tentative plot
+plot(vcat(Ebound...), vcat(nuclei...))
+
 
 ## Plot a configuration in 3D
 #X0, a = MCs.initializeSystem(N, cbrt(320))
-X0 = [dfp[1, col] for col in 1:3N] # subset of columns
-make3Dplot(X0, L=L, Lz=Lz, T=T, reuse=false)
 
 make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T)
 gui()
+surface( xr, yr, zr )
+
 
 
 ## Check energy, pressure and ar
 Plots.plot(dfd.E[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
-Plots.plot(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
+Plots.scatter(dfd.jj[1:2:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
-plot(C_H[1][1:10:1000000], legend=false)
-kmax = round(Int, length(dfd.E)/2)
-plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)),
- yaxis = (:log10, (1,Inf)))
+
+plot(C_H.CH[1:10:1000000], legend=false)
+kmax = floor(Int, numData/2)
+plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
+plot(abs.(fft(C_H.CH)), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (0.1,Inf)))
 gui()
 
 #acfsimple = acf(dfd.E, 10000)

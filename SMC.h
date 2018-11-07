@@ -24,14 +24,13 @@
 #define M 3
 
 // number of particles:
-#define N 32
+#define N 108
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
 #define MAXSTEPS 1000000
 // frequency of acquisition and storage of thermodinamic variables
 #define MEASUREMENT_PERIOD 100 */
-
 
 
 typedef struct DoubleArray { 
@@ -75,7 +74,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz);
 double wallsPressure(const double *r, const double * W, double L, double Lz);
 void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D);
-void boundsCheck(double *r, double L, double Lz);
+int boundsCheck(double *r, double L, double Lz);
 
 void simple_acf(const double *H, size_t length, int k_max, double * acf);
 void fft_acf(const double *H, size_t length, int k_max, double * acf);
