@@ -119,11 +119,16 @@ mass = mass_mol / 6.022e23  # g
 
 N = 108
 M = 3
-L = 60#30
-Lz = 100#70
+if N==108
+    L = 60#30
+    Lz = 100#70
+else
+    L = 34#30
+    Lz = 70#70
+end
 gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.42
+T = 0.7
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -217,7 +222,7 @@ p = plot(x, y, f, st = [:surface, :contourf], layout=l)
 # end
 
 W = LinRange(-L/2, L/2, M)
-contour(W, W, Ebound, fill=true, reuse=true, legend=true)
+contour(W, W, Ebound, fill=true, reuse=false, legend=true)
 
 
 ## Ebound - Condensed particles
@@ -243,16 +248,46 @@ Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.scatter(dfd.jj[1:2:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
 
-plot(C_H.CH[1:10:1000000], legend=false)
-kmax = floor(Int, numData/2)
+plot(C_H.CH[1:10:end], legend=false)
+kmax = floor(Int, gather_length/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
-plot(abs.(fft(C_H.CH)), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (0.1,Inf)))
+plot(abs.(fft(C_H.CH))[1:10:end], xaxis = (:log10, (1,length(C_H.CH)/2)), yaxis = (:log10, (0.1,Inf)))
 gui()
 
 #acfsimple = acf(dfd.E, 10000)
 #acffast = fft_acf(dfd.E, 5000)
 #tausimple = sum(acfsimple)
 #tau = sum(acffast)
+
+## Provare a calcolare parametro d'ordine in ogni cubetto
+## (prima va diviso dfp in cubetti...)
+## XX è matrice con vettore posizioni sul primo indice, tempo sul secondo
+function orderParameter(XX, rho)
+    N = Int(size(XX,1)/3)
+    L = cbrt(N/rho)
+    Na = round(Int,∛(N/4)) # number of cells per dimension
+    a = L / Na  # passo reticolare
+    r = XX[:,size(XX,2)÷3:end]  # taglia parti non all'equilibrio
+    dx = zeros(Na^3*3,size(r,2))
+    dy = zeros(dx)
+    dz = zeros(dx)
+    for k=0:Na^3-1
+        @inbounds for i=1:3
+            dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
+            dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
+            dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
+            dy[3k+i,:] .-= L.*round.(dy[3k+i,:]/L)
+            dz[3k+i,:] = r[12k+3,:] - r[12k+3i+3,:]
+            dz[3k+i,:] .-= L.*round.(dz[3k+i,:]/L)
+        end
+    end
+    dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
+    R = dr[:,1]
+    K = 2π./R
+    ordPar = mean((cos.(K.*dr)),2)
+    return mean(ordPar)
+end
+
 
 
 # a T 0.18 quasi tutte sulla superficie
