@@ -117,7 +117,7 @@ end
 mass_mol = 536.438          # g/mol
 mass = mass_mol / 6.022e23  # g
 
-N = 108
+N = 32
 M = 3
 if N==108
     L = 60#30
@@ -128,7 +128,7 @@ else
 end
 gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.7
+T = 0.69
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -154,13 +154,13 @@ for i = 0:nd-1
         v = i*nd*nd + j*nd;
         LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
 
-        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:3) ]);
-        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (4:6) ]);
-        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (7:9) ]);
+        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:2) ]);
+        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (3:4) ]);
+        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (5:9) ]);
         LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (10:21) ]);
-        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (22:24) ]);
-        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (25:27) ]);
-        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (28:30) ]);
+        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (22:26) ]);
+        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (27:28) ]);
+        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (29:30) ]);
         #LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j)
         #  .& ( (lD.nz .== 2) .| (lD.nz .== 3) | (lD.nz .== 4) )]);
     end
@@ -204,7 +204,7 @@ for i = 0:M-1
     end
 end
 
-X0 = [dfp[67000, col] for col in 1:3N] # subset of columns
+X0 = [dfp[4, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
 
 x = y = range(-5, stop = 5, length = 40)

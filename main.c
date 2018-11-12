@@ -9,22 +9,23 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 18000000;
-    int gather_lapse = (int) maxsteps/240000;     // number of steps between each acquisition of data
-    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
+    int maxsteps = 4200000;
+    int gather_lapse = (int) maxsteps/100000;     // number of steps between each acquisition of data
+    int eqsteps = 2000000;       // number of steps for the equilibrium pre-simulation
+    int numbins = 36*36*36;
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
         L = 34; // 30, 70
         Lz = 70;
     #else
-        L = 60;
-        Lz = 100;
+        L = 40;//60;
+        Lz = 225;//100;
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.7;
-    double gamma = 0.9;
+    double T = 0.69;
+    double gamma = 1.2;
     //double dT = 2e-2;
     //double s = sqrt(4*A*D)/dT;
     double A = gamma*T; // legata a L?
@@ -50,7 +51,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
+    double x0m = 2.0;       // average width of the wall (distance at which the potential is 0)
     double x0sigma = 0.0;
     double ym = 4.0;        // average bounding energy
     double ymsigma = 0.5;
@@ -97,7 +98,7 @@ int main(int argc, char** argv)
         
     struct Sim MC1;
     
-    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps);
+    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps, numbins);
     
     
     printf("\n###  Final results  ###");
