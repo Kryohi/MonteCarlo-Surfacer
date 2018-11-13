@@ -3,14 +3,10 @@
  * 
  * Unire calcolo energia e forze interparticellari e con parete?
  * chiedere a utente parametri simulazione
- * deltaX gaussiano sferico o in ogni direzione?
  * decidere cosa mettere come macro e cosa come variabile passata a simulation (tipo gather_lapse)
- * energia totale come 1/2 somma delle energie singole?
  * fare grafico di local density in funzione di E legame
- * passare anche rank processo e metterlo in tutti i printf
- * in generale fare in modo che noMPI venga trattato come se avesse rank 0
- * IMPORTANTE: capire se il L*L/4 può essere lasciato com'è
- * vedere se si può semplificare calcolo distanze da pareti
+ * passare anche rank processo e metterlo in tutti i printf/fprinf
+ * fare in modo che noMPI venga trattato come se avesse rank 0
  * localDensity con numero minore di divisioni lungo z
  * legare Elegame e sigmaElegame con T
  */
@@ -19,22 +15,20 @@
 #include "SMC.h"
 
 
-struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps)   
+struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps, int numbins)   
 {
     // System properties
     double rho = N / (L*L*Lz);
-    double Wmin; // width of the "wall"
-    Wmin = 1.0; // TODO, andrebbe calcolato da W
     
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 2000000; // maximum autocorrelation distance
-    int Nv = 30*30*30; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
-    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
+    int kmax = 2500000; // maximum autocorrelation distance
+    int Nc = numbins; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
+    int Nl = (int) rint(cbrt(Nc)); // number of cells per dimension
     bool savePositions = true;
     if (gather_steps > 200000)
-        savePositions = false; printf("Puntual positions will not be saved\n");
+        savePositions = false; printf("Puntual positions will not be saved.\n");
     
     
     // other variables
@@ -46,15 +40,19 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     double *R = malloc(3*N * sizeof(double));
     memcpy(R, R0, 3*N * sizeof(double));
     double * Rn = calloc(3*N, sizeof(double)); // contains the proposed particle positions
-    double * E = calloc(maxsteps, sizeof(double));
+    double * E = calloc(maxsteps+1, sizeof(double));   // da sostituire a E una volta verificato funzionamento
+    E[0] = energy(R, L);
+    E[0] += wallsEnergy(R, W, L, Lz);
     double * P = calloc(gather_steps, sizeof(double));
-    int * jj = calloc(maxsteps, sizeof(int));   
-    int * jt = calloc(eqsteps, sizeof(int)); // per termalizzazione
-    unsigned long * lD = calloc(Nv, sizeof(unsigned long));
-    unsigned long * lD_old = calloc(Nv, sizeof(unsigned long));
+    int * jj = calloc(maxsteps, sizeof(int));   //stores acceptance ratio
+    int * jt = calloc(eqsteps, sizeof(int)); // same as above but for thermalization
+    int * Rbin = calloc(N, sizeof(int));    // stores in which cell each particle is
+    unsigned long * lD = calloc(Nc, sizeof(unsigned long)); // local density
+    unsigned long * lD_old = calloc(Nc, sizeof(unsigned long));
+    unsigned long * Mu = calloc(Nc, sizeof(unsigned long)); // local mobility
+    unsigned long * Mu_old = calloc(Nc, sizeof(unsigned long));
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
-    //double * acf2 = calloc(kmax, sizeof(double));   // da eliminare quando sarò sicuro che fft_acf funziona bene
-
+    
     
     // Initialize csv files
     char filename[64];
@@ -72,12 +70,12 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     FILE * localdensity;
     snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     localdensity = fopen(filename, "w");
-    fprintf(localdensity, "nx, ny, nz, n\n");
+    fprintf(localdensity, "nx, ny, nz, n, mu\n");
     
     FILE * localdensity_temp;
     snprintf(filename, 64, "./localdensity_temp_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     localdensity_temp = fopen(filename, "w");    
-    fprintf(localdensity_temp, "nx, ny, nz, n\n");
+    fprintf(localdensity_temp, "nx, ny, nz, n, mu\n");
     
     FILE * autocorrelation;
     snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
@@ -100,9 +98,9 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     for (int n=0; n<eqsteps; n++)
     {
-        E[n] = energy(R, L);
-        E[n] += wallsEnergy(R, W, L, Lz);
-        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jt[n]);
+        //E[n] = energy(R, L) + wallsEnergy(R, W, L, Lz);// calcolata in modo più intelligente dentro oneParticleMoves
+        E[n+1] = E[n];  // then the energy difference gets added inside the function
+        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jt[n], &E[n+1]);
     }
     
     end = clock();
@@ -124,24 +122,23 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
             
-            P[k] = pressure(R, L, Lz);
-            P[k] += wallsPressure(R, W, L, Lz);
-            localDensity(R, L, Lz, Nv, lD); // add the number of particles in each block of the volume
-            // check that all particles are within the walls
-            boundsCheck(R, L, Lz);
+            //P[k] = pressure(R, L, Lz) + wallsPressure(R, W, L, Lz);
+            localDensityAndMobility(R, L, Lz, Nc, lD, Rbin, Mu);
+            boundsCheck(R, L, Lz-0.5);  // check that all particles are within the walls
             
-            if (k % 10000 == 0 && k != 0)  
+            if (k % 25000 == 0 && k != 0)  
             {   // dump of the local density in the last million or so steps
-                printf("Storing the latest density distribution at %d steps...\n", n);
+                printf("Storing the latest density distribution at %d steps.\n", n);
                 for (int i=0; i<Nl; i++)    {
                     for (int j=0; j<Nl; j++)    {
                         for (int k=0; k<Nl; k++)    {
                             int v = i*Nl*Nl + j*Nl + k;
-                            fprintf(localdensity_temp, "%d, %d, %d, %lu\n", i, j, k, lD[v] - lD_old[v]);
+                            fprintf(localdensity_temp, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v] - lD_old[v], Mu[v] - Mu_old[v]);
                         }
                     }
                 }
-                memcpy(lD_old, lD, Nv * sizeof(unsigned long)); // save the current localDensity cumulative number
+                memcpy(lD_old, lD, Nc * sizeof(unsigned long)); // save the current localDensity cumulative number
+                memcpy(Mu_old, Mu, Nc * sizeof(unsigned long)); // save the current localDensity cumulative number
             }
             
             if (savePositions)  {
@@ -152,10 +149,8 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             }
         }
         
-        E[n] = energy(R, L);  // da calcolare in modo più intelligente dentro oneParticleMoves
-        E[n] += wallsEnergy(R, W, L, Lz);
-        
-        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n]);
+        E[n+1] = E[n];  // then the energy difference gets added inside the function
+        oneParticleMoves(R, Rn, W, L, Lz, A, T, &jj[n], &E[n+1]);
     }
     
     end = clock();
@@ -175,14 +170,14 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k], jj[k]);
     
     
     for (int i=0; i<Nl; i++)    {
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 int v = i*Nl*Nl + j*Nl + k;
-                fprintf(localdensity, "%d, %d, %d, %lu\n", i, j, k, lD[v]);
+                fprintf(localdensity, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v], Mu[v]);
             }
         }
     }
@@ -231,23 +226,26 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
  * 
 */
 
-void oneParticleMoves(double * R, double * Rn, const double * W, double L, double Lz, double A, double T, int * j)
+void oneParticleMoves(double * R, double * Rn, const double * W, double L, double Lz, double A0, double T, int *j, double *E)
 {
     double * displ = malloc(3*N * sizeof(double));
     double Um, Un, deltaX, deltaY, deltaZ, Fmx, Fmy, Fmz, Fnx, Fny, Fnz, deltaW, ap;
+    double A = A0;
         
     vecBoxMuller(sqrt(2*A), 3*N, displ);
     
     for (int i=0; i<3*N; i++)   // controllare se è necessario qua o si può usare solo una volta all'inizio
         Rn[i] = R[i];
     
-    // at each oneParicleMoves call, we start moving a different particle (offset % N)
+    // at each oneParticleMoves call, we start moving a different particle (offset % N) // not used right now
     int n; int offset = rand();
     
     for (int nn=0; nn<N; nn++)
     {
         //n = (nn+offset)%N;
         n = nn;
+        
+        (fabs(R[3*n+2]) > Lz/8) ? (A=A0) : (A=A0*2); // if the particle is in the middle of the box the step can be bigger
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
@@ -268,7 +266,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         
         Rn[3*n] = Rn[3*n] - L*rint(Rn[3*n]/L);         // verificare che vada bene qui
         Rn[3*n+1] = Rn[3*n+1] - L*rint(Rn[3*n+1]/L);
-        Rn[3*n+2] = Rn[3*n+2] - Lz*rint(Rn[3*n+2]/Lz);  // serve o fa danni?
+        //Rn[3*n+2] = Rn[3*n+2] - Lz*rint(Rn[3*n+2]/Lz);  // serve o fa danni?
 
         // calculate energy and forces in the proposed new position
         Un = energySingle(Rn, L, n);
@@ -294,6 +292,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
             R[3*n+1] = Rn[3*n+1];
             R[3*n+2] = Rn[3*n+2];
             *j += 1;
+            *E += Un-Um;
         }
         else    {
             Rn[3*n] = R[3*n];
@@ -417,8 +416,7 @@ void initializeBox(double L, double Lz, int N_, double *X)
 
 void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, double *W, FILE * wall)    
 {
-    //srand(time(NULL));  // necessary because initializeWalls gets called in main, 
-    //otherwise the walls are always the same
+    srand(42);  // necessary because initializeWalls gets called in main, otherwise the walls are always the same
     
     double * X0 = malloc(M*M * sizeof(double));
     double * YM = malloc(M*M * sizeof(double));
@@ -683,18 +681,26 @@ double pressure(const double *r, double L, double Lz)
 double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L, double Lz)
 {
     double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
+    double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;    // distance between two wall elements
     
-    for (int i=0; i<M; i++) {
-        for (int j=0; j<M; j++) {
+    dz = rz + Lz/2;
+    dz = dz - Lz*rint(dz/Lz);
+    if (rz <= -Lz/2) dz = 0.0001;
+    else if (rz >= Lz/2) dz = -0.0001;
+    dz6 = dz*dz*dz*dz*dz*dz;
+    V += a0/(dz6*dz6) - b0/dz6;
+    
+    for (int i=0; i<M; i++) 
+    {
+        for (int j=0; j<M; j++) 
+        {
             int m = j + i*M;
             dx = rx - i*dw;// - dw/2;
             dx = dx - L*rint(dx/L);
             dy = ry - j*dw;// - dw/2;
             dy = dy - L*rint(dy/L);
-            dz = rz + Lz/2;
-            dz = dz - Lz*rint(dz/Lz);
+            
             dr2 = dx*dx + dy*dy + dz*dz;
         
             if (dr2 < L*L/4)
@@ -717,11 +723,23 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz) 
 { 
-    double dx, dy, dz, dr2, dr8, dV;
+    double dx, dy, dz, dr2, dr8, dz8, dV;
     double dw = L/M;    // distance between consecutive wall potential sources
     
-   for (int i=0; i<M; i++) 
-   {
+    // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
+    // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
+    // se rz è negativo, dz = (rz+L/2) > 0
+    // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
+    dz = rz + Lz/2;
+    dz = dz - Lz*rint(dz/Lz);
+    if (rz <= -Lz/2) dz = 0.0001;
+    else if (rz >= Lz/2) dz = -0.0001;
+    dz8 = dz*dz*dz*dz*dz*dz*dz*dz;
+    dV = 48.0 * a0 / (dz8*dz*dz*dz*dz*dz*dz) - 24.0 * b0 / dz8;
+    *Fz += dV*dz;
+    
+    for (int i=0; i<M; i++) 
+    {
         for (int j=0; j<M; j++) 
         {
             int m = j + i*M;
@@ -729,12 +747,7 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
             dx = dx - L*rint(dx/L);
             dy = ry - j*dw;// - dw/2;
             dy = dy - L*rint(dy/L);
-            // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
-            // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
-            // se rz è negativo, dz = (rz+L/2) > 0
-            // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
-            dz = rz + Lz/2;
-            dz = dz - Lz*rint(dz/Lz);
+            
             dr2 = dx*dx + dy*dy + dz*dz;
         
             if (dr2 < L*L/4)
@@ -759,22 +772,28 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
 double wallsEnergy(const double *r, const double *W, double L, double Lz)  
 {
     double V = 0.0;
-    double dx, dy, dz, dr2, dr6;
+    double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;
     
-     for (int i=0; i<M; i++) 
-     {
-        for (int j=0; j<M; j++) 
+    for (int n=0; n<N; n++)  
+    {
+        dz = r[3*n+2] + Lz/2;
+        dz = dz - Lz*rint(dz/Lz);
+        if (r[3*n+2] <= -Lz/2) dz = 0.0001;
+        else if (r[3*n+2] >= Lz/2) dz = -0.0001;
+        dz6 = dz*dz*dz*dz*dz*dz;
+        V += a0/(dz6*dz6) - b0/dz6;
+        
+        for (int i=0; i<M; i++) 
         {
-            int m = j + i*M;
-            for (int n=0; n<N; n++)  
+            for (int j=0; j<M; j++) 
             {
+                int m = j + i*M;
                 dx = r[3*n] - i*dw;// - dw/2;
                 dx = dx - L*rint(dx/L);
                 dy = r[3*n+1] - j*dw;// - dw/2;
                 dy = dy - L*rint(dy/L);
-                dz = r[3*n+2] + Lz/2;
-                dz = dz - Lz*rint(dz/Lz);
+                
                 dr2 = dx*dx + dy*dy + dz*dz;
         
                 if (dr2 < L*L/4)
@@ -792,7 +811,7 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
 double wallsPressure(const double *r, const double * W, double L, double Lz)
 {
     double P = 0.0;
-    double dx, dy, dz, dr2, dr6;
+    double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;
     
     for (int i=0; i<M; i++) 
@@ -814,6 +833,8 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
                 {
                     dr6 = dr2*dr2*dr2;
                     P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
+                    dz6 = dz*dz*dz*dz*dz*dz;
+                    P += 24.0*b0/dz6 - 48.0*a0/(dz6*dz6);
                 }
             }
         }
@@ -829,23 +850,25 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
  * returns a N/4 array containing the number of particles in each block, iterating in the z, then y, then x direction.
  * D isn't reinitialized, so it can be used for cumulative counting.
  * 
- */ // Attualmente i blocchi sono dei parallelepipedi di dimensione costante.
-
-void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D)
+ * // Attualmente i blocchi sono dei parallelepipedi di dimensione costante.
+ * Rbin vettore con N elementi, ognuno con numero v di appartenenza cella
+ * Mu vettore Nc elementi, in ognuno ogni volta che un particella esce dal cubetto associato si alza un contatore
+*/
+void localDensityAndMobility(const double *r, double L, double Lz, int Nc, unsigned long int *D, int *Rbin, unsigned long int *Mu)
 {
     double * p = malloc(3*N * sizeof(double));
     memcpy(p, r, 3*N * sizeof(double));
     
-    // shift the particles positions by L/2 for convenience
+    // shift the particles positions by L/2 for coNcenience
     for (int n=0; n<N; n++) {
         p[3*n] = p[3*n] + L/2;
         p[3*n+1] = p[3*n+1] + L/2;
         p[3*n+2] = p[3*n+2] + Lz/2;
     }
     
-    int Nl = (int) rint(cbrt(Nv)); // number of cells per dimension
-    if ( !isApproxEqual((double) Nl, cbrt(Nv)) )
-        printf("The number passed to localDensity() should be a perfect cube, got %f != %f\n", cbrt(Nv), (double) Nl);
+    int Nl = (int) rint(cbrt(Nc)); // number of cells per dimension
+    if ( !isApproxEqual((double) Nl, cbrt(Nc)) )
+        printf("The number passed to localDensity() should be a perfect cube, got %f != %f\n", cbrt(Nc), (double) Nl);
     
     int v;  // unique number for each triplet i,j,k
     double dL = L / Nl;
@@ -858,7 +881,13 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
                 for (int n=0; n<N; n++)        {
                     if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)
                         && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
-                        D[v]++;
+                    {
+                        D[v]++; // local density counter up by one
+                        if (Rbin[n] != v) {
+                            Mu[v]++;        // if particle n changed cell, mobility for that cell up by one
+                            Rbin[n] = v;  // particle n is now in cell v
+                        }
+                    }
                 }
             }
         }
@@ -876,8 +905,8 @@ void localDensity(const double *r, double L, double Lz, int Nv, unsigned long in
 void fft_acf(const double *H, size_t length, int k_max, double * acf)   
 {
     if (length < k_max*2+1) {
-        perror("error: number of datapoints too low to calculate autocorrelation");
-        //return;
+        printf("number of datapoints too low to calculate autocorrelation");
+        k_max = (int)rint(length/2) - 1;
     }
     
     fftw_plan p;

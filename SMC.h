@@ -26,11 +26,16 @@
 // number of particles:
 #define N 108
 
+// Parameters of the "default", omnipresent wall (current 0.5 0.5)
+#define a0 0.0000244140625
+#define b0 0.0015625
+
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
 #define MAXSTEPS 1000000
 // frequency of acquisition and storage of thermodinamic variables
 #define MEASUREMENT_PERIOD 100 */
+
 
 
 typedef struct DoubleArray { 
@@ -52,7 +57,7 @@ typedef struct Sim {    // struct containing all the useful results of one simul
 
 
 
-struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps);
+struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps, int numbins);
 void vecBoxMuller(double sigma, size_t length, double *A);
 void shiftSystem(double * r, double L);
 void shiftSystem2D(double * r, double L);
@@ -61,7 +66,7 @@ void initializeWalls(double x0m, double x0sigma, double ym, double ymsigma, doub
 void initializeBox(double L, double Lz, int n, double * X);
 
 //void markovProbability(const double * R, double * Rn, double L, double T, double s, double d, double *ap);
-void oneParticleMoves(double * R, double * Rn, const double * W, double L, double Lz, double A, double T, int * j);
+void oneParticleMoves(double * R, double * Rn, const double * W, double L, double Lz, double A, double T, int * j, double * U);
 
 double energySingle(const double *r, double L, int i);
 void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz);
@@ -73,7 +78,7 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz);
 double wallsEnergySingle(double rx, double ry, double rz, const double * W, double L, double Lz);
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz);
 double wallsPressure(const double *r, const double * W, double L, double Lz);
-void localDensity(const double *r, double L, double Lz, int Nv, unsigned long int *D);
+void localDensityAndMobility(const double *r, double L, double Lz, int Nv, unsigned long int *D, int *Rbin, unsigned long int *Mu);
 int boundsCheck(double *r, double L, double Lz);
 
 void simple_acf(const double *H, size_t length, int k_max, double * acf);

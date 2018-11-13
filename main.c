@@ -10,21 +10,22 @@ int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
     int maxsteps = 18000000;
-    int gather_lapse = (int) maxsteps/240000;     // number of steps between each acquisition of data
-    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
+    int gather_lapse = (int) maxsteps/600000;     // number of steps between each acquisition of data
+    int eqsteps = 4000000;       // number of steps for the equilibrium pre-simulation
+    int numbins = 33*33*33;
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
-        L = 34; // 30, 70
-        Lz = 70;
+        L = 20; // 30, 70
+        Lz = 180;
     #else
-        L = 60;
-        Lz = 100;
+        L = 33;//60;
+        Lz = 200;//100;
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 0.7;
-    double gamma = 0.9;
+    double T = 2.4; // 1.1, 0.9, 1.3, 1.5
+    double gamma = 0.66;
     //double dT = 2e-2;
     //double s = sqrt(4*A*D)/dT;
     double A = gamma*T; // legata a L?
@@ -50,10 +51,10 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 1.0;       // average width of the wall (distance at which the potential is 0)
+    double x0m = 2.0;       // average width of the wall (distance at which the potential is 0) 
     double x0sigma = 0.0;
-    double ym = 4.0;        // average bounding energy
-    double ymsigma = 0.5;
+    double ym = 3.0;        // average bounding energy //da sinistra:3.5, 3.0, 4.0
+    double ymsigma = 0.5;   // 0.5, 0.5, 0.5
     
     // save the wall potentials to a csv file     
     snprintf(filename, 64, "./wall_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
@@ -97,7 +98,7 @@ int main(int argc, char** argv)
         
     struct Sim MC1;
     
-    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps);
+    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps, numbins);
     
     
     printf("\n###  Final results  ###");
