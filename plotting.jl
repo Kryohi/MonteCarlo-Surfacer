@@ -117,18 +117,18 @@ end
 mass_mol = 536.438          # g/mol
 mass = mass_mol / 6.022e23  # g
 
-N = 32
+N = 108
 M = 3
 if N==108
-    L = 60#30
-    Lz = 100#70
+    L = 33#30
+    Lz = 200#200#70
 else
     L = 34#30
     Lz = 70#70
 end
 gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 0.69
+T = 2.0
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -141,30 +141,45 @@ lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 gather_length = length(dfd.E)
+gather_lapse = round(Int, 12*10^6/gather_length)
 #lD[:n] = lD[:n] / numData
 
 
-## local density plot
+##################################
+## Local density and mobility plots
+##################################
+
 nd = Int(cbrt(length(lD.n)))
 LD_impilata = zeros(nd,nd)
 LD_parz_impilata = zeros(nd,nd,7)
+mobility_part = zeros(nd,nd,7)
 
 for i = 0:nd-1
     for j = 0:nd-1
         v = i*nd*nd + j*nd;
         LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
-
-        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:2) ]);
-        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (3:4) ]);
-        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (5:9) ]);
-        LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (10:21) ]);
-        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (22:26) ]);
-        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (27:28) ]);
-        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (29:30) ]);
+        LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:1) ]);
+        LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (2:2) ]);
+        LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (3:11) ]);
+        LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (12:19) ]);
+        LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (20:31) ]);
+        LD_parz_impilata[i+1, j+1, 6] = sum(lD.n[ v .+ (32:32) ]);
+        LD_parz_impilata[i+1, j+1, 7] = sum(lD.n[ v .+ (33:nd) ]);
+        mobility_part[i+1, j+1, 1] = sum(lD.mu[ v .+ (1:1) ]);
+        mobility_part[i+1, j+1, 2] = sum(lD.mu[ v .+ (2:2) ]);
+        mobility_part[i+1, j+1, 3] = sum(lD.mu[ v .+ (3:11) ]);
+        mobility_part[i+1, j+1, 4] = sum(lD.mu[ v .+ (12:19) ]);
+        mobility_part[i+1, j+1, 5] = sum(lD.mu[ v .+ (20:31) ]);
+        mobility_part[i+1, j+1, 6] = sum(lD.mu[ v .+ (32:32) ]);
+        mobility_part[i+1, j+1, 7] = sum(lD.mu[ v .+ (33:nd) ]);
         #LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j)
         #  .& ( (lD.nz .== 2) .| (lD.nz .== 3) | (lD.nz .== 4) )]);
     end
 end
+LD_impilata = LD_impilata./gather_length
+LD_parz_impilata = LD_parz_impilata./gather_length
+mobility_part = mobility_part./gather_length
+mobility_part = mobility_part ./ LD_parz_impilata
 
 z_distr = zeros(7)
 for n = 1:7
@@ -173,12 +188,10 @@ end
 
 X = LinRange(-L/2, L/2, nd);
 
-contour(X, X, LD_impilata, fill=true, reuse=false)
+contourf(X, X, LD_parz_impilata[:,:,4], aspect_ratio=1, title="Z 4/7", reuse=false)
 #contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
 
-## tentativo di mettere insieme subplots
-
-#l = @layout()
+## Grafico con fette in subplots di densità
 data = [LD_parz_impilata[:,:,i] for i in [1,2,3,5,6,7]]
 p1 = contourf(X, X, LD_parz_impilata[:,:,1], aspect_ratio=1);
 p2 = contourf(X, X, LD_parz_impilata[:,:,2], aspect_ratio=1);
@@ -187,6 +200,18 @@ p5 = contourf(X, X, LD_parz_impilata[:,:,5], aspect_ratio=1);
 p6 = contourf(X, X, LD_parz_impilata[:,:,6], aspect_ratio=1);
 p7 = contourf(X, X, LD_parz_impilata[:,:,7], aspect_ratio=1);
 plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
+title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
+
+## Grafico con fette in subplots di mobility
+data = [mobility_part[:,:,i] for i in [1,2,3,5,6,7]]
+minm = minimum(mobility_part[:])
+p1 = contourf(X, X, mobility_part[:,:,1], clims=[minm,1.], aspect_ratio=1);
+p2 = contourf(X, X, mobility_part[:,:,2], clims=[minm,1.], aspect_ratio=1);
+p3 = contourf(X, X, mobility_part[:,:,3], clims=[minm,1.], aspect_ratio=1);
+p5 = contourf(X, X, mobility_part[:,:,5], clims=[minm,1.], aspect_ratio=1);
+p6 = contourf(X, X, mobility_part[:,:,6], clims=[minm,1.], aspect_ratio=1);
+p7 = contourf(X, X, mobility_part[:,:,7], clims=[minm,1.], aspect_ratio=1);
+plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), clims=[minm,1.], title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
 title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
 
 
@@ -204,14 +229,13 @@ for i = 0:M-1
     end
 end
 
-X0 = [dfp[4, col] for col in 1:3N] # subset of columns
+X0 = [dfp[4000, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
-
-x = y = range(-5, stop = 5, length = 40)
-f(x,y) = sin(x + 10sin(4)) + cos(y)
-l = @layout [a{0.7w} b; c{0.2h}]
-p = plot(x, y, f, st = [:surface, :contourf], layout=l)
-
+#
+# x = y = range(-5, stop = 5, length = 40)
+# f(x,y) = sin(x + 10sin(4)) + cos(y)
+# l = @layout [a{0.7w} b; c{0.2h}]
+# p = plot(x, y, f, st = [:surface, :contourf], layout=l)
 
 # xrange = 0.0:0.001:3
 # w1 = plot(xrange, xrange.^0 .-1, xaxis=("x", (xrange[1], xrange[end])), yaxis=("V", (-2.5, 4)), reuse=false)
@@ -233,60 +257,29 @@ approx_ratio = (sum(LD_parz_impilata[:,:,1])+sum(LD_parz_impilata[:,:,7]))/sum(L
 plot(vcat(Ebound...), vcat(nuclei...))
 
 
-## Plot a configuration in 3D
-#X0, a = MCs.initializeSystem(N, cbrt(320))
-
-make3Dplot(dfp, 7000, 7010, L=L, Lz=Lz, T=T)
-gui()
-surface( xr, yr, zr )
-
-
 
 ## Check energy, pressure and ar
-Plots.plot(dfd.E[1:10:end], linewidth=0.5, reuse=false, legend=false)
+pyplot(size=(400, 300))
+Plots.plot(1:100*gather_lapse:length(dfd.E)*gather_lapse, dfd.E[1:100:end],
+ linewidth=0.5, xlabel = "n", ylabel="E",reuse=false, legend=false)
 Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
-Plots.scatter(dfd.jj[1:2:end]./N, linewidth=0.5, reuse=false, legend=false)
+Plots.scatter(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
 
-plot(C_H.CH[1:10:end], legend=false)
+plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,2e6)), legend=false)
 kmax = floor(Int, gather_length/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
-plot(abs.(fft(C_H.CH))[1:10:end], xaxis = (:log10, (1,length(C_H.CH)/2)), yaxis = (:log10, (0.1,Inf)))
+plot(abs.(fft(C_H.CH))[1:10:round(Int, length(C_H.CH)/2)-1], xaxis = (:log10, (1,length(C_H.CH)/2-1)), yaxis = (:log10, (0.1,Inf)))
 gui()
+plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C_H.CH)/2)],
+ xaxis = ("k", (1,length(C_H.CH)/2-1)), yaxis = ("pds", (0,80)))
+
 
 #acfsimple = acf(dfd.E, 10000)
 #acffast = fft_acf(dfd.E, 5000)
 #tausimple = sum(acfsimple)
 #tau = sum(acffast)
 
-## Provare a calcolare parametro d'ordine in ogni cubetto
-## (prima va diviso dfp in cubetti...)
-## XX è matrice con vettore posizioni sul primo indice, tempo sul secondo
-function orderParameter(XX, rho)
-    N = Int(size(XX,1)/3)
-    L = cbrt(N/rho)
-    Na = round(Int,∛(N/4)) # number of cells per dimension
-    a = L / Na  # passo reticolare
-    r = XX[:,size(XX,2)÷3:end]  # taglia parti non all'equilibrio
-    dx = zeros(Na^3*3,size(r,2))
-    dy = zeros(dx)
-    dz = zeros(dx)
-    for k=0:Na^3-1
-        @inbounds for i=1:3
-            dx[3k+i,:] = r[12k+1,:] - r[12k+3i+1,:]
-            dx[3k+i,:] .-= L.*round.(dx[3k+i,:]/L)
-            dy[3k+i,:] = r[12k+2,:] - r[12k+3i+2,:]
-            dy[3k+i,:] .-= L.*round.(dy[3k+i,:]/L)
-            dz[3k+i,:] = r[12k+3,:] - r[12k+3i+3,:]
-            dz[3k+i,:] .-= L.*round.(dz[3k+i,:]/L)
-        end
-    end
-    dr = sqrt.(dx.^2 + dy.^2 + dz.^2)
-    R = dr[:,1]
-    K = 2π./R
-    ordPar = mean((cos.(K.*dr)),2)
-    return mean(ordPar)
-end
 
 
 

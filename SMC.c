@@ -19,18 +19,16 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
 {
     // System properties
     double rho = N / (L*L*Lz);
-    double Wmin; // width of the "wall"
-    Wmin = 1.0; // TODO, andrebbe calcolato da W
     
     
     // Data-harvesting parameters
     int gather_steps = (int)(maxsteps/gather_lapse);
-    int kmax = 2000000; // maximum autocorrelation distance
+    int kmax = 2500000; // maximum autocorrelation distance
     int Nc = numbins; // number of cubes dividing the volume, to compute the local density (should be a perfect cube)
     int Nl = (int) rint(cbrt(Nc)); // number of cells per dimension
     bool savePositions = true;
     if (gather_steps > 200000)
-        savePositions = false; printf("Puntual positions will not be saved\n");
+        savePositions = false; printf("Puntual positions will not be saved.\n");
     
     
     // other variables
@@ -100,11 +98,9 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     for (int n=0; n<eqsteps; n++)
     {
-        //E[n] = energy(R, L);// calcolata in modo più intelligente dentro oneParticleMoves
-        //E[n] += wallsEnergy(R, W, L, Lz);
+        //E[n] = energy(R, L) + wallsEnergy(R, W, L, Lz);// calcolata in modo più intelligente dentro oneParticleMoves
         E[n+1] = E[n];  // then the energy difference gets added inside the function
         oneParticleMoves(R, Rn, W, L, Lz, A, T, &jt[n], &E[n+1]);
-        boundsCheck(R, L, Lz);
     }
     
     end = clock();
@@ -126,15 +122,13 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
         if (n % gather_lapse == 0)  {
             int k = (int)(n/gather_lapse);
             
-            P[k] = pressure(R, L, Lz);
-            P[k] += wallsPressure(R, W, L, Lz);
+            //P[k] = pressure(R, L, Lz) + wallsPressure(R, W, L, Lz);
             localDensityAndMobility(R, L, Lz, Nc, lD, Rbin, Mu);
-            // check that all particles are within the walls
-            boundsCheck(R, L, Lz);
+            boundsCheck(R, L, Lz-0.5);  // check that all particles are within the walls
             
-            if (k % 10000 == 0 && k != 0)  
+            if (k % 25000 == 0 && k != 0)  
             {   // dump of the local density in the last million or so steps
-                printf("Storing the latest density distribution at %d steps...\n", n);
+                printf("Storing the latest density distribution at %d steps.\n", n);
                 for (int i=0; i<Nl; i++)    {
                     for (int j=0; j<Nl; j++)    {
                         for (int k=0; k<Nl; k++)    {
@@ -176,7 +170,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     
     // save temporal data of the system (gather_steps arrays of energy, pressure and acceptance ratio)
     for (int k=0; k<gather_steps; k++)
-        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k]+rho*T, jj[k]);
+        fprintf(data, "%0.9lf, %0.9lf, %d\n", E[k*gather_lapse], P[k], jj[k]);
     
     
     for (int i=0; i<Nl; i++)    {
@@ -251,7 +245,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         //n = (nn+offset)%N;
         n = nn;
         
-        (fabs(R[3*n+2]) > Lz/4) ? (A=A0) : (A=A0*2);// if the particle is in the middle of the box the step can be bigger
+        (fabs(R[3*n+2]) > Lz/8) ? (A=A0) : (A=A0*2); // if the particle is in the middle of the box the step can be bigger
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
@@ -422,8 +416,7 @@ void initializeBox(double L, double Lz, int N_, double *X)
 
 void initializeWalls(double x0m, double x0sigma, double ymm, double ymsigma, double *W, FILE * wall)    
 {
-    //srand(time(NULL));  // necessary because initializeWalls gets called in main, 
-    //otherwise the walls are always the same
+    srand(42);  // necessary because initializeWalls gets called in main, otherwise the walls are always the same
     
     double * X0 = malloc(M*M * sizeof(double));
     double * YM = malloc(M*M * sizeof(double));
@@ -834,9 +827,6 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
                 dy = dy - L*rint(dy/L);
                 dz = r[3*n+2] + L/2;
                 dz = dz - Lz*rint(dz/Lz);
-                if (r[3*n+2] <= -Lz/2) dz = 0.001;
-                else if (r[3*n+2] >= Lz/2) dz = -0.001;
-
                 dr2 = dx*dx + dy*dy + dz*dz;
             
                 if (dr2 < L*L/4)

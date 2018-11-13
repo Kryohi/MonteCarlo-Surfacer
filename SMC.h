@@ -24,11 +24,11 @@
 #define M 3
 
 // number of particles:
-#define N 32
+#define N 108
 
 // Parameters of the "default", omnipresent wall (current 0.5 0.5)
-#define a0 0.0001220703125
-#define b0 0.0078125
+#define a0 0.0000244140625
+#define b0 0.0015625
 
 /* NON USATI
 // Number of simulation steps (all particles) after the equilibration MEASUREMENT_PERIOD
