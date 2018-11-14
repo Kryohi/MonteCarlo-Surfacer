@@ -128,7 +128,7 @@ else
 end
 gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 2.0
+T = 2.2
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -141,7 +141,7 @@ lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 gather_length = length(dfd.E)
-gather_lapse = round(Int, 12*10^6/gather_length)
+gather_lapse = round(Int, 18*10^6/gather_length)
 #lD[:n] = lD[:n] / numData
 
 
@@ -266,10 +266,11 @@ Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.scatter(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
 
-plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,2e6)), legend=false)
+plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,length(C_H.CH))), legend=false)
 kmax = floor(Int, gather_length/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
-plot(abs.(fft(C_H.CH))[1:10:round(Int, length(C_H.CH)/2)-1], xaxis = (:log10, (1,length(C_H.CH)/2-1)), yaxis = (:log10, (0.1,Inf)))
+acf_pds = abs.(rfft(C_H.CH))
+plot(1:10:length(acf_pds), acf_pds[1:10:end], yaxis = (:log10, (0.1,Inf)))
 gui()
 plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C_H.CH)/2)],
  xaxis = ("k", (1,length(C_H.CH)/2-1)), yaxis = ("pds", (0,80)))

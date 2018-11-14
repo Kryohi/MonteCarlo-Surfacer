@@ -127,7 +127,13 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             boundsCheck(R, L, Lz-0.5);  // check that all particles are within the walls
             
             if (k % 25000 == 0 && k != 0)  
-            {   // dump of the local density in the last million or so steps
+            {   // save some configurations
+                if (!savePositions) {
+                    for (int i=0; i<3*N; i++)
+                        fprintf(positions, "%0.3lf,", R[i]);    // provare %6g
+                fprintf(positions, "\n");
+                }
+                // dump of the local density in the last million or so steps
                 printf("Storing the latest density distribution at %d steps.\n", n);
                 for (int i=0; i<Nl; i++)    {
                     for (int j=0; j<Nl; j++)    {
@@ -859,7 +865,7 @@ void localDensityAndMobility(const double *r, double L, double Lz, int Nc, unsig
     double * p = malloc(3*N * sizeof(double));
     memcpy(p, r, 3*N * sizeof(double));
     
-    // shift the particles positions by L/2 for coNcenience
+    // shift the particles positions by L/2 for convenience
     for (int n=0; n<N; n++) {
         p[3*n] = p[3*n] + L/2;
         p[3*n+1] = p[3*n+1] + L/2;
@@ -879,8 +885,8 @@ void localDensityAndMobility(const double *r, double L, double Lz, int Nc, unsig
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)
-                        && (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz))
+                    if (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz)) $$ ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) 
+                        &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)    // provare a precalcolare array con i k*dL etc.
                     {
                         D[v]++; // local density counter up by one
                         if (Rbin[n] != v) {
