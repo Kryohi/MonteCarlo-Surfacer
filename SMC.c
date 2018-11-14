@@ -11,8 +11,10 @@
  * legare Elegame e sigmaElegame con T
  */
 
-
 #include "SMC.h"
+#ifndef rank
+#define rank 0
+#endif
 
 
 struct Sim sMC(double L, double Lz, double T, double A, const double *W, const double *R0, int maxsteps, int gather_lapse, int eqsteps, int numbins)   
@@ -57,32 +59,35 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     // Initialize csv files
     char filename[64];
     
-    snprintf(filename, 64, "./positions_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./positions_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
     FILE *positions = fopen(filename, "w");
     for (int n=0; n<N; n++)
         fprintf(positions, "x%d,y%d,z%d,", n+1, n+1, n+1);
     fprintf(positions, "\n");
+    for (int i=0; i<3*N; i++)
+        fprintf(positions, "%0.3lf,", R[i]);    // provare %6g
+    fprintf(positions, "\n");
     
-    snprintf(filename, 64, "./data_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./data_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
     FILE *data = fopen(filename, "w");
     fprintf(data, "E, P, jj\n");
     
-    FILE * localdensity;
-    snprintf(filename, 64, "./localdensity_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
-    localdensity = fopen(filename, "w");
-    fprintf(localdensity, "nx, ny, nz, n, mu\n");
+    FILE * local;
+    snprintf(filename, 64, "./local_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
+    local = fopen(filename, "w");
+    fprintf(local, "nx, ny, nz, n, mu\n");
     
-    FILE * localdensity_temp;
-    snprintf(filename, 64, "./localdensity_temp_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
-    localdensity_temp = fopen(filename, "w");    
-    fprintf(localdensity_temp, "nx, ny, nz, n, mu\n");
+    FILE * local_temp;
+    snprintf(filename, 64, "./local_temp_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
+    local_temp = fopen(filename, "w");    
+    fprintf(local_temp, "nx, ny, nz, n, mu\n");
     
     FILE * autocorrelation;
-    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
+    snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
     autocorrelation = fopen(filename, "w");    
     fprintf(autocorrelation, "CH\n");
     
-    if (autocorrelation == NULL || positions == NULL || data == NULL || localdensity == NULL)
+    if (autocorrelation == NULL || positions == NULL || data == NULL || local == NULL)
         perror("error while opening csv files");
 
     
@@ -139,7 +144,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
                     for (int j=0; j<Nl; j++)    {
                         for (int k=0; k<Nl; k++)    {
                             int v = i*Nl*Nl + j*Nl + k;
-                            fprintf(localdensity_temp, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v] - lD_old[v], Mu[v] - Mu_old[v]);
+                            fprintf(local_temp, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v] - lD_old[v], Mu[v] - Mu_old[v]);
                         }
                     }
                 }
@@ -183,7 +188,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
         for (int j=0; j<Nl; j++)    {
             for (int k=0; k<Nl; k++)    {
                 int v = i*Nl*Nl + j*Nl + k;
-                fprintf(localdensity, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v], Mu[v]);
+                fprintf(local, "%d, %d, %d, %lu, %lu\n", i, j, k, lD[v], Mu[v]);
             }
         }
     }
@@ -218,7 +223,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
    
     // free the allocated memory
     free(R); free(Rn); free(E); free(P); free(jj); free(jt); free(acf); free(lD);
-    fclose(positions); fclose(data); fclose(autocorrelation); fclose(localdensity);
+    fclose(positions); fclose(data); fclose(autocorrelation); fclose(local); fclose(local_temp);
 
     return results;
 }
@@ -373,16 +378,26 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 
 void initializeBox(double L, double Lz, int N_, double *X) 
 {
+    
     int Na = (int)(cbrt(N_/4)); // number of cells per dimension
+    for (int nc = 1; nc < N_; nc++)
+    {
+        if (nc*nc*nc > N_/4)   {
+            Na = nc-1;
+            break;
+        }
+    }
+    Nz = (N_/4)/(Na*Na)
+    
+    if ( !isApproxEqual(rint((N_/4)/(Na*Na)), Nz )
+        perror("Can't make a parallelepiped crystal with this N :(\n");
+
     double a = L / Na;
-
-    if ( !isApproxEqual((double) Na, cbrt(N_/4)) )
-        perror("Can't make a cubic FCC crystal with this N :(");
-
+    
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
         for (int j=0; j<Na; j++)    {
-            for (int k=0; k<Na; k++)    {
+            for (int k=0; k<Nz; k++)    {
                 int n = i*Na*Na + j*Na + k; // unique number for each triplet i,j,k
                 X[n*12+0] = a*i;
                 X[n*12+1] = a*j;
@@ -410,6 +425,9 @@ void initializeBox(double L, double Lz, int N_, double *X)
     }
 
     shiftSystem3D(X,L,L);   // uses L instead of Lz in order to put the lattice at the center of the box
+    if ( boundsCheck(R, L, Lz-0.5) > 0 )
+        perror("Lz is too small or there is something else going wrong\n");
+
 }
 
 
@@ -885,8 +903,8 @@ void localDensityAndMobility(const double *r, double L, double Lz, int Nc, unsig
             for (int k=0; k<Nl; k++)    {
                 v = i*Nl*Nl + j*Nl + k;
                 for (int n=0; n<N; n++)        {
-                    if (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz)) $$ ((p[3*n]>i*dL && p[3*n]<(i+1)*dL) 
-                        &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL)    // provare a precalcolare array con i k*dL etc.
+                    if ( (p[3*n+2]>k*dLz && p[3*n+2]<(k+1)*dLz) && (p[3*n]>i*dL && p[3*n]<(i+1)*dL) 
+                        &&  (p[3*n+1]>j*dL && p[3*n+1]<(j+1)*dL) )   // provare a precalcolare array con i k*dL etc.
                     {
                         D[v]++; // local density counter up by one
                         if (Rbin[n] != v) {

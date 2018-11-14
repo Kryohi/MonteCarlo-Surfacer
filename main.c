@@ -18,14 +18,17 @@ int main(int argc, char** argv)
     #if N==32
         L = 20; // 30, 70
         Lz = 180;
-    #else
+    #elif N<120
         L = 33;//60;
         Lz = 200;//100;
+    #else 
+        L = 33;
+        Lz = 200;
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 2.4; // 1.1, 0.9, 1.3, 1.5
-    double gamma = 0.66;
+    double T = 2.5;
+    double gamma = 0.7;
     //double dT = 2e-2;
     //double s = sqrt(4*A*D)/dT;
     double A = gamma*T; // legata a L?

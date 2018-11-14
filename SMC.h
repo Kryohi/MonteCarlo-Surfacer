@@ -1,6 +1,5 @@
-#ifndef SMC
-#define SMC
 
+#pragma once
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -26,7 +25,7 @@
 // number of particles:
 #define N 108
 
-// Parameters of the "default", omnipresent wall (current 0.5 0.5)
+// Parameters of the "default", omnipresent wall (current 0.5 0.1)
 #define a0 0.0000244140625
 #define b0 0.0015625
 
@@ -97,6 +96,5 @@ int * currentTime();
 void make_directory(const char* name);
 
 
-#endif
 
 
