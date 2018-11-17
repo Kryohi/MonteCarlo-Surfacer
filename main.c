@@ -9,9 +9,9 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 8000000;
-    int gather_lapse = (int) maxsteps/400000;     // number of steps between each acquisition of data
-    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
+    int maxsteps = 18000000;
+    int gather_lapse = (int) maxsteps/500000;     // number of steps between each acquisition of data
+    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
     int numbins = 33*33*33;
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?

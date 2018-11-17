@@ -164,7 +164,6 @@ for i = 0:nd-1
         LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
         LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:1) ]);
         LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (2:2) ]);
-        @show lD.nx[v+2], lD.ny[v+2], lD.nz[v+2]
         LD_parz_impilata[i+1, j+1, 3] = sum(lD.n[ v .+ (3:11) ]);
         LD_parz_impilata[i+1, j+1, 4] = sum(lD.n[ v .+ (12:19) ]);
         LD_parz_impilata[i+1, j+1, 5] = sum(lD.n[ v .+ (20:31) ]);

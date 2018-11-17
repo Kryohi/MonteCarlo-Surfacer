@@ -23,7 +23,7 @@
 #define M 3
 
 // number of particles:
-#define N 32
+#define N 108
 
 // Parameters of the "default", omnipresent wall (current 0.5 0.1)
 #define a0 0.0000244140625
