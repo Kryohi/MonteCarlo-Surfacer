@@ -1,6 +1,5 @@
-#ifndef SMC
-#define SMC
 
+#pragma once
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -26,7 +25,7 @@
 // number of particles:
 #define N 108
 
-// Parameters of the "default", omnipresent wall (current 0.5 0.5)
+// Parameters of the "default", omnipresent wall (current 0.5 0.1)
 #define a0 0.0000244140625
 #define b0 0.0015625
 
@@ -79,6 +78,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
 void wallsForce(double rx, double ry, double rz, const double * W, double L, double Lz, double *Fx, double *Fy, double *Fz);
 double wallsPressure(const double *r, const double * W, double L, double Lz);
 void localDensityAndMobility(const double *r, double L, double Lz, int Nv, unsigned long int *D, int *Rbin, unsigned long int *Mu);
+void clusterAnalysis(const double *r, int N_, double L, double cutoff, int *LCA);
 int boundsCheck(double *r, double L, double Lz);
 
 void simple_acf(const double *H, size_t length, int k_max, double * acf);
@@ -97,6 +97,5 @@ int * currentTime();
 void make_directory(const char* name);
 
 
-#endif
 
 

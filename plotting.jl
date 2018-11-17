@@ -14,15 +14,15 @@ using Plots.PlotMeasures
 #run(`./smc`)
 
 
-function make3Dplot(A::Array{Float64,1}; T = -1.0, L = -1.0, Lz = -1.0, surface=true, we=zeros(3,3), reuse=true)
+function make3Dplot(A::Array{Float64,1}; T=-1.0, L=-1.0, Lz=-1.0, we=zeros(3,3), surface=true,reuse=true)
 
     N = Int(length(A)/3)
     if L == -1.0
         Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue,Plots.stroke(0)),
          w=7, xaxis=("x"), yaxis=("y"), zaxis=("z"), leg=false, reuse=reuse)
     else
-        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)),
-         w=7, xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)), leg=false, reuse=reuse)
+        Plots.scatter3d(A[1:3:3N-2], A[2:3:3N-1], A[3:3:3N], m=(6,0.7,:blue, Plots.stroke(0)), w=7,
+        xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)), leg=false, reuse=reuse)
     end
     if surface
         x = LinRange(-L/2, L/2, 3)
@@ -128,20 +128,21 @@ else
 end
 gamma = 0.7
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 2.0
+T = 2.1
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
 
-dfp = DataFrame(load(string("./positions", parameters, ".csv")))
 dfw = DataFrame(load(string("./wall", parameters, ".csv")))
-dfd = DataFrame(load(string("./data", parameters, ".csv")))
-C_H = DataFrame(load(string("./autocorrelation", parameters, ".csv")))
-lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
+dfp = DataFrame(load(string("./positions", parameters, "_rank0.csv")))
+dfd = DataFrame(load(string("./data", parameters, "_rank0.csv")))
+C_H = DataFrame(load(string("./autocorrelation", parameters, "_rank0.csv")))
+#lD = DataFrame(load(string("./localdensity", parameters, ".csv")))
+lD = DataFrame(load(string("./local", parameters, "_rank0.csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
 gather_length = length(dfd.E)
-gather_lapse = round(Int, 12*10^6/gather_length)
+gather_lapse = round(Int, 18*10^6/gather_length)
 #lD[:n] = lD[:n] / numData
 
 
@@ -150,13 +151,16 @@ gather_lapse = round(Int, 12*10^6/gather_length)
 ##################################
 
 nd = Int(cbrt(length(lD.n)))
-LD_impilata = zeros(nd,nd)
+LD = zeros(nd, nd, nd)
+LD_impilata = zeros(nd, nd)
 LD_parz_impilata = zeros(nd,nd,7)
 mobility_part = zeros(nd,nd,7)
+
 
 for i = 0:nd-1
     for j = 0:nd-1
         v = i*nd*nd + j*nd;
+        LD[i+1,j+1,:] = lD.n[v .+ (1:nd)]
         LD_impilata[i+1, j+1] = sum(lD.n[ (lD.nx .== i) .& (lD.ny .== j) ])
         LD_parz_impilata[i+1, j+1, 1] = sum(lD.n[ v .+ (1:1) ]);
         LD_parz_impilata[i+1, j+1, 2] = sum(lD.n[ v .+ (2:2) ]);
@@ -176,6 +180,7 @@ for i = 0:nd-1
         #  .& ( (lD.nz .== 2) .| (lD.nz .== 3) | (lD.nz .== 4) )]);
     end
 end
+LD = LD./gather_length
 LD_impilata = LD_impilata./gather_length
 LD_parz_impilata = LD_parz_impilata./gather_length
 mobility_part = mobility_part./gather_length
@@ -211,8 +216,9 @@ p3 = contourf(X, X, mobility_part[:,:,3], clims=[minm,1.], aspect_ratio=1);
 p5 = contourf(X, X, mobility_part[:,:,5], clims=[minm,1.], aspect_ratio=1);
 p6 = contourf(X, X, mobility_part[:,:,6], clims=[minm,1.], aspect_ratio=1);
 p7 = contourf(X, X, mobility_part[:,:,7], clims=[minm,1.], aspect_ratio=1);
-plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), clims=[minm,1.], title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
-title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
+plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), clims=[minm,1.],
+ title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
+ title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
 
 
 ## wall potential
@@ -229,7 +235,7 @@ for i = 0:M-1
     end
 end
 
-X0 = [dfp[4000, col] for col in 1:3N] # subset of columns
+X0 = [dfp[4, col] for col in 1:3N] # subset of columns
 make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
 #
 # x = y = range(-5, stop = 5, length = 40)
@@ -238,7 +244,7 @@ make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
 # p = plot(x, y, f, st = [:surface, :contourf], layout=l)
 
 # xrange = 0.0:0.001:3
-# w1 = plot(xrange, xrange.^0 .-1, xaxis=("x", (xrange[1], xrange[end])), yaxis=("V", (-2.5, 4)), reuse=false)
+# w1 = plot(xrange,xrange.^0 .-1, xaxis=("x",(xrange[1], xrange[end])),yaxis=("V",(-2.5, 4)),reuse=false)
 # for i = 1:M
 #     for j = 1:M
 #         plot!(w1, xrange, 4 .* (A[i,j].*xrange.^-12 - B[i,j].*xrange.^-6))
@@ -250,7 +256,8 @@ contour(W, W, Ebound, fill=true, reuse=false, legend=true)
 
 
 ## Ebound - Condensed particles
-approx_ratio = (sum(LD_parz_impilata[:,:,1])+sum(LD_parz_impilata[:,:,7]))/sum(LD_parz_impilata[:,:,2:end-1])
+approx_ratio = (sum(LD_parz_impilata[:,:,1])+
+ sum(LD_parz_impilata[:,:,7]))/sum(LD_parz_impilata[:,:,2:end-1])
 #first thing to do is finding the LD boxes corresponding to the wall potential
 
 # tentative plot
@@ -266,10 +273,11 @@ Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.scatter(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
 
-plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,2e6)), legend=false)
+plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,length(C_H.CH))), legend=false)
 kmax = floor(Int, gather_length/2)
 plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
-plot(abs.(fft(C_H.CH))[1:10:round(Int, length(C_H.CH)/2)-1], xaxis = (:log10, (1,length(C_H.CH)/2-1)), yaxis = (:log10, (0.1,Inf)))
+acf_pds = abs.(rfft(C_H.CH))
+plot(1:10:length(acf_pds), acf_pds[1:10:end], yaxis = (:log10, (0.1,Inf)))
 gui()
 plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C_H.CH)/2)],
  xaxis = ("k", (1,length(C_H.CH)/2-1)), yaxis = ("pds", (0,80)))
@@ -281,6 +289,20 @@ plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C
 #tau = sum(acffast)
 
 
+using Makie
 
+vx = -1:0.01:1
+vy = -1:0.01:1
 
-# a T 0.18 quasi tutte sulla superficie
+f(x, y) = (sin(x*10) + cos(y*10)) / 4
+
+p1 = Makie.surface(vx, vy, f)
+p2 = Makie.contour3d(vx, vy, (x, y) -> f(x,y), levels = 15, linewidth = 3)
+
+scene = vbox(p1, p2)
+text!(campixel(p1), "surface", position = widths(p1) .* Vec(0.5, 1), align=(:center,:top), raw=true)
+text!(campixel(p2), "contour3d", position = widths(p2) .* Vec(0.5, 1), align=(:center,:top), raw=true)
+scene
+
+gui()
+volume(LD./maximum(LD), algorithm = :mip)
