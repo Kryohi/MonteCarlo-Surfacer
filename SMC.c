@@ -38,6 +38,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     double sim_time;
     srand(time(NULL)); //should be different for each process
     
+    
     //copy the initial positions R0 (common to all the simulations) to the local array R
     double *R = malloc(3*N * sizeof(double));
     memcpy(R, R0, 3*N * sizeof(double));
@@ -53,6 +54,9 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     unsigned long * lD_old = calloc(Nc, sizeof(unsigned long));
     unsigned long * Mu = calloc(Nc, sizeof(unsigned long)); // local mobility
     unsigned long * Mu_old = calloc(Nc, sizeof(unsigned long));
+    int * clusters_global = calloc(3*(N*N-N)/2, sizeof(int));
+    unsigned long * l2 = calloc(5, sizeof(unsigned long));  // stores number of occurrencies of a certain second cluster number
+    unsigned long * l3 = calloc(5, sizeof(unsigned long));  // stores number of occurrencies of a certain third cluster number
     double * acf = calloc(kmax, sizeof(double));    // autocorrelation function
     
     
@@ -81,6 +85,11 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
     snprintf(filename, 64, "./local_temp_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
     local_temp = fopen(filename, "w");    
     fprintf(local_temp, "nx, ny, nz, n, mu\n");
+    
+    FILE * total_clusters;
+    snprintf(filename, 64, "./total_clusters_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
+    total_clusters = fopen(filename, "w");    
+    fprintf(total_clusters, "l1, l2, l3\n");
     
     FILE * autocorrelation;
     snprintf(filename, 64, "./autocorrelation_N%d_M%d_r%0.4f_T%0.2f_rank%d.csv", N, M, rho, T, rank);
@@ -129,7 +138,15 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             
             //P[k] = pressure(R, L, Lz) + wallsPressure(R, W, L, Lz);
             localDensityAndMobility(R, L, Lz, Nc, lD, Rbin, Mu);
-            boundsCheck(R, L, Lz-0.5);  // check that all particles are within the walls
+            clusterAnalysis(R, N, L, 1.8, clusters_global);
+            for (int i=0; i<(N*N-N)/2; i++)  { //temporaneo, bisognerà fare una "media" poi
+                if (clusters_global[3*i] !=0)   {
+                    //fprintf(total_clusters, "%d, %d, %d\n", clusters_global[3*i], clusters_global[3*i+1], clusters_global[3*i+2]);
+                    l2[clusters_global[3*i+1]]++;
+                    l3[clusters_global[3*i+2]]++;
+                }
+            }
+            
             
             if (k % 25000 == 0 && k != 0)  
             {   // save some configurations
@@ -158,6 +175,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
 
                 fprintf(positions, "\n");
             }
+            boundsCheck(R, L, Lz-0.5);  // check that all particles are within the walls
         }
         
         E[n+1] = E[n];  // then the energy difference gets added inside the function
@@ -192,7 +210,9 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
             }
         }
     }
-    
+    // temporaneo
+    printf("l2[1] = %lu\t l2[2] = %lu\tl2[3] = %lu\tl2[4] = %lu\n", l2[0], l2[1], l2[2], l2[3]);
+    printf("l3[1] = %lu\t l3[2] = %lu\tl3[3] = %lu\tl3[4] = %lu\n", l3[0], l3[1], l3[2], l3[3]);
 
     // autocorrelation calculation
     fft_acf(E, maxsteps, kmax, acf);
@@ -256,7 +276,7 @@ void oneParticleMoves(double * R, double * Rn, const double * W, double L, doubl
         //n = (nn+offset)%N;
         n = nn;
         
-        (fabs(R[3*n+2]) > Lz/8) ? (A=A0) : (A=A0*2); // if the particle is in the middle of the box the step can be bigger
+        //(fabs(R[3*n+2]) > Lz/8) ? (A=A0) : (A=A0*2); // if the particle is in the middle of the box the step can be bigger
 
         // calculate the potential energy of particle n, first due to other particles and then to the wall
         Um = energySingle(R, L, n);
@@ -374,12 +394,11 @@ void markovProbability(const double *X, double *Y, double L, double T, double s,
 /*
  * Initialize the particle positions X as a fcc crystal centered around (0, 0, 0)
  * with the shape of a cube with L = cbrt(V)
-*/ //TODO vedere se è meglio usare az e allungare reticolo. Also più flessibilità nel numero particelle
-
+ */
 void initializeBox(double L, double Lz, int N_, double *X) 
 {
-    
-    int Na = (int)(cbrt(N_/4)); // number of cells per dimension
+    srand(42);
+    int Na = 42; // number of cells per dimension
     for (int nc = 1; nc < N_; nc++)
     {
         if (nc*nc*nc > N_/4)   {
@@ -387,13 +406,11 @@ void initializeBox(double L, double Lz, int N_, double *X)
             break;
         }
     }
-    Nz = (N_/4)/(Na*Na)
-    
-    if ( !isApproxEqual(rint((N_/4)/(Na*Na)), Nz )
-        perror("Can't make a parallelepiped crystal with this N :(\n");
+    int Nz = rint((N_/4)/(Na*Na));
+    if ( !isApproxEqual( (N_/4)/(Na*Na), (double) Nz) )  
+        perror("Can't make a crystal with this N, it should be an integer times a perfect square, all divisible by 4.\n");
 
     double a = L / Na;
-    
 
     for (int i=0; i<Na; i++)    {   // loop over every cell of the fcc lattice
         for (int j=0; j<Na; j++)    {
@@ -418,14 +435,14 @@ void initializeBox(double L, double Lz, int N_, double *X)
         }
     }
 
-    for (int n=0; n<N; n++) {    // avoid particles exactly at the edges of the box
-        X[3*n] += a/4;
-        X[3*n+1] += a/4;  
-        X[3*n+2] += a/4;
+    for (int n=0; n<N; n++) {    // avoid particles exactly at the edges of the box or overlapping
+        X[3*n] += a/4 + L*rand()/(RAND_MAX*10000);
+        X[3*n+1] += a/4 + L*rand()/(RAND_MAX*10000);
+        X[3*n+2] += a/4 + L*rand()/(RAND_MAX*10000);
     }
 
-    shiftSystem3D(X,L,L);   // uses L instead of Lz in order to put the lattice at the center of the box
-    if ( boundsCheck(R, L, Lz-0.5) > 0 )
+    shiftSystem3D(X,L,Lz-Lz/20);   // uses L instead of Lz in order to put the lattice at the center of the box
+    if ( boundsCheck(X, L, Lz-0.5) > 0 )
         perror("Lz is too small or there is something else going wrong\n");
 
 }
@@ -498,7 +515,6 @@ inline void shiftSystem3D(double *r, double L, double Lz)
     }
 }
 
-// TODO chiedere se va bene tralasciare lungo z
 inline void shiftSystem2D(double *r, double L)
 {
     for (int j=0; j<N; j++) {
@@ -566,8 +582,7 @@ double energySingle(const double *r, double L, int i)
 /*
  * Calculate the forces acting on particle i due to the interaction with other particles
  * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
-*/  // TODO segni da ricontrollare per l'ennesima volta
-
+*/
 void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
 {
     double dx, dy, dz, dr2, dr8, dV;
@@ -918,6 +933,84 @@ void localDensityAndMobility(const double *r, double L, double Lz, int Nc, unsig
     }
     free(p);
 }
+
+
+// TODO 
+// verificare che ordine indici sia il più veloce, definire LCA e fare in modo che di def in 0 sia 2
+// Da aggiungere versione locale per bin vicini a superficie
+void clusterAnalysis(const double *r, int N_, double L, double cutoff, int *LCA)
+{
+    double * dist2 = malloc((int)((N_*N_-N_)/2) * sizeof(double));   // distanze sono matr. triangolare a traccia nulla
+    int * num1 = calloc((int)((N_*N_-N_)/2), sizeof(int));
+    int * num2 = calloc((int)((N_*N_-N_)/2), sizeof(int));
+    int * num3 = calloc((int)((N_*N_-N_)/2), sizeof(int)); 
+    int common_nn[8];
+    int idx, idx2, idx3;
+    double dx, dy, dz;
+    
+    // finds all the couples that are near each other
+    for (int l=1; l<N_; l++)    {
+        for (int i=0; i<l; i++)   {
+            idx = (l*l-3*l+2)/2 + i;  // index is [(l-1)^2 - (l-1)]/2 + i
+            dx = r[3*l] - r[3*i];
+            dx = dx - L*rint(dx/L);
+            dy = r[3*l+1] - r[3*i+1];
+            dy = dy - L*rint(dy/L);
+            dz = r[3*l+2] - r[3*i+2];
+            dist2[idx] = dx*dx + dy*dy + dz*dz;
+            if (dist2[idx] < cutoff*cutoff)
+                // se sotto il cutoff, sono nn (primo numero)
+                num1[idx] = 1;
+                            
+        }
+    }
+    
+    // calculate the string type for each couple
+    for (int l=1; l<N_; l++)    {
+        for (int i=0; i<l; i++)   {
+            idx = (l*l-3*l+2)/2 + i;
+            if (num1[idx] == 1)
+            {
+                for (int i2=0; i2<l; i2++)  
+                {   // search near neighbors common to both i and l
+                    if (i2 != i)    // excludes the i-i couple
+                    { 
+                        idx2 = idx - i + i2;        // l-i2 couple
+                        idx3 = (i2*i2-3*i2+2)/2 + i;  // i-i2 couple
+                        if (num1[idx2] == 1 && num1[idx3] == 1) 
+                        {
+                            common_nn[num2[idx]] = i2;  // saves which particles (at l,i2) are neighbors of both i and l
+                            num2[idx]++;
+                        }
+                    }
+                }
+                // search if the common neighbors found are in turn near each other
+                if (num2[idx] > 1)
+                {
+                    for  (int m = 1; m < num2[idx]; m++)    
+                    {
+                        idx2 = (common_nn[m]*common_nn[m] - 3*common_nn[m] +2)/2 + common_nn[m-1];   // index of the common_nn couples
+                        if (num1[idx2] == 1) 
+                            num3[idx]++;
+                    }
+                }
+            }
+        }
+    }
+            
+     
+    for (int n = 0; n < (N_*N_-N_)/2; n++)
+    {
+        if (num1[n] != 0)
+            //printf("n: %d.\t %d %d %d\n", n, num1[n], num2[n], num2[n]);
+        LCA[3*n+0] = num1[n];
+        LCA[3*n+1] = num2[n];
+        LCA[3*n+2] = num3[n];
+    }
+    
+    free(num1); free(num2); free(num3);
+}
+
 
 
 

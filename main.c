@@ -9,15 +9,15 @@
 int main(int argc, char** argv)
 {
     // variables common to the simulations in every process
-    int maxsteps = 18000000;
-    int gather_lapse = (int) maxsteps/600000;     // number of steps between each acquisition of data
-    int eqsteps = 4000000;       // number of steps for the equilibrium pre-simulation
+    int maxsteps = 8000000;
+    int gather_lapse = (int) maxsteps/400000;     // number of steps between each acquisition of data
+    int eqsteps = 1000000;       // number of steps for the equilibrium pre-simulation
     int numbins = 33*33*33;
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
         L = 20; // 30, 70
-        Lz = 180;
+        Lz = 120;
     #elif N<120
         L = 33;//60;
         Lz = 200;//100;
@@ -27,8 +27,8 @@ int main(int argc, char** argv)
     #endif
 
     double rho = N / (L*L*Lz);
-    double T = 2.5;
-    double gamma = 0.7;
+    double T = 1.8;
+    double gamma = 1.0;
     //double dT = 2e-2;
     //double s = sqrt(4*A*D)/dT;
     double A = gamma*T; // legata a L?
@@ -80,7 +80,7 @@ int main(int argc, char** argv)
    
     snprintf(filename, 64, "./last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     
-    if (access( filename, F_OK ) != -1 && 42==24) 
+    if (access( filename, F_OK ) != -1) 
     {
         printf("\nUsing previously saved particle configuration...\n");
         FILE * last_state;
