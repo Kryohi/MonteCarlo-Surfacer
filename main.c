@@ -1,6 +1,4 @@
 
-
-#include "SMC.h"
 #include "SMC.c"
 
 #define rank 0
@@ -8,31 +6,50 @@
 
 int main(int argc, char** argv)
 {
-    // variables common to the simulations in every process
-    int maxsteps = 18000000;
-    int gather_lapse = (int) maxsteps/500000;     // number of steps between each acquisition of data
-    int eqsteps = 3000000;       // number of steps for the equilibrium pre-simulation
-    int numbins = 33*33*33;
+    // variables common to the simulations in every process (some of them are not exposed to the user and are in SMC.h)
+    double T;
+    int eqsteps, maxsteps, numdata;
+    
+    if (argc == 5)
+    {
+        eqsteps = (int)strtol(argv[1], NULL, 10);   // number of steps for the equilibrium pre-simulation (4000000)
+        maxsteps = (int)strtol(argv[2], NULL, 10);  // number of steps after the equilibration (16000000)
+        numdata = (int)strtol(argv[3], NULL, 10);   // number of acquired data (400000)
+        T = new_strtof(argv[4], NULL, 10);  // temperature (1.1)
+    }
+    else    {
+        // asks user for grid parameters and quantum numbers
+        printf("Enter the number of equilibration steps: ");
+        scanf("%d",&eqsteps);
+        printf("Enter the number of simulation steps: ");
+        scanf("%d",&maxsteps);
+        printf("Enter the number of microstates to analyze: ");
+        scanf("%d",&numdata);
+        printf("Enter the temperature in normalized units: ");
+        scanf("%lf",&T);
+    }
+    
+    int gather_lapse = (int) floor(maxsteps/numdata);   // number of steps between each acquisition of data 
     double L, Lz;
     // oppure fissare densità e rapporto Lz/L ?
     #if N==32
         L = 20; // 30, 70
         Lz = 120;
-    #elif N<120
+    #elif N<150
         L = 33;//60;
         Lz = 200;//100;
     #else 
         L = 33;
-        Lz = 200;
+        Lz = 240;
     #endif
 
+    // other thermodinamic variables
     double rho = N / (L*L*Lz);
-    double T = 1.8;
     double gamma = 1.0;
     //double dT = 2e-2;
     //double s = sqrt(4*A*D)/dT;
     double A = gamma*T; // legata a L?
-    
+
     
     // creates data folder and common filename suffix to save data
     make_directory("Data");
@@ -43,9 +60,9 @@ int main(int argc, char** argv)
     chdir(filename);
     
     
+    // Reassure the user that at least something is working
     int *now = currentTime();
-    printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n", now[0], now[1]);
-    
+    printf("\n\n----  Starting the simulation at local time %02d:%02d  ----\n\n", now[0], now[1]);    
     
     /* Initialize Walls:
     */
@@ -54,7 +71,7 @@ int main(int argc, char** argv)
     double * W = calloc(2*M*M, sizeof(double));
     
     // parameters of Lennard-Jones potentials of the walls (average and sigma of a gaussian)
-    double x0m = 2.0;       // average width of the wall (distance at which the potential is 0) 
+    double x0m = 1.6;       // average width of the wall (distance at which the potential is 0) 
     double x0sigma = 0.0;
     double ym = 3.0;        // average bounding energy //da sinistra:3.5, 3.0, 4.0
     double ymsigma = 0.5;   // 0.5, 0.5, 0.5
@@ -80,9 +97,9 @@ int main(int argc, char** argv)
    
     snprintf(filename, 64, "./last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     
-    if (access( filename, F_OK ) != -1) 
+    if (access( filename, F_OK ) != -1 && 0==1) //TODO verify everything works and remove 0==1
     {
-        printf("\nUsing previously saved particle configuration...\n");
+        printf("\nUsing previously saved particle configuration...");
         FILE * last_state;
         last_state = fopen(filename, "r");  // o cercare ultima riga di positions con fseek?
         for (int i=0; i<3*N; i++)
@@ -91,25 +108,29 @@ int main(int argc, char** argv)
         fclose(last_state);
     
     } else {
-        printf("\nInitializing system...\n");
+        printf("\nInitializing system...");
         initializeBox(L, Lz, N, R0);
     }
-    
+    double E0 = energy(R0, L) + wallsEnergy(R0, W, L, Lz) + 3*N*T/2;
+    printf("\nSystem initialized, with energy E0 = %f.\n", E0);
     
     
     /* Prepare the results and start the simulation(s) */
-        
+    
     struct Sim MC1;
     
-    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps, numbins);
+    MC1 = sMC(L, Lz, T, A, W, R0, maxsteps, gather_lapse, eqsteps);
     
     
+    /* Print the results */
     printf("\n###  Final results  ###");
     printf("\nMean energy: %f ± %f", MC1.E, MC1.dE);
     printf("\nMean pressure: %f ± %f", MC1.P, MC1.dP);
     printf("\nApproximate heat capacity: %f", MC1.cv);
     printf("\nAverage autocorrelation time: %f", MC1.tau);
     printf("\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
+    printf("\nl2[0] = %f\t l2[1] = %f\tl2[3] = %f\tl2[4] = %f\tl2[5] = %f", MC1.l2[0], MC1.l2[1], MC1.l2[2], MC1.l2[3], MC1.l2[4]);
+    printf("\nl3[0] = %f\t l3[1] = %f\tl3[3] = %f\tl3[4] = %f\tl3[5] = %f", MC1.l3[0], MC1.l3[1], MC1.l3[2], MC1.l3[3], MC1.l3[4]);
     printf("\n");
     
     
@@ -117,7 +138,11 @@ int main(int argc, char** argv)
     FILE * info;
     snprintf(filename, 64, "./info_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     info = fopen(filename, "w");
-    fprintf(info, "\nBox dimensions: %0.1f * %0.1f * %0.1f", (double)L, (double)L, (double)Lz);
+    fprintf(info, "\nEquilibration steps: %d", eqsteps);
+    fprintf(info, "\nSimulation steps: %d", maxsteps);
+    fprintf(info, "\nNumber of data: %d", numdata);
+    fprintf(info, "\nBox dimensions: %0.1f * %0.1f * %0.1f", L, L, Lz);
+    fprintf(info, "\nCells grid: %d * %d * %d", Ncx, Ncx, Ncz);
     fprintf(info, "\nParticle density: %0.4f", N / (L*L*Lz));
     fprintf(info, "\nAverage interparticle distance: ~%0.3f", cbrt((L*L*Lz)/N)/2);
     fprintf(info, "\nWall elements distance / interparticle distance: ~%0.3f", (L/M) / (cbrt((L*L*Lz)/N)) / 2);
@@ -126,7 +151,12 @@ int main(int argc, char** argv)
     fprintf(info, "\nMean pressure: %f ± %f", MC1.P, MC1.dP);
     fprintf(info, "\nApproximate heat capacity: %f", MC1.cv);
     fprintf(info, "\nAverage autocorrelation time: %f", MC1.tau);
-    fprintf(info, "\nAverage acceptance ratio: %f\n", MC1.acceptance_ratio);
+    fprintf(info, "\nAverage acceptance ratio: %f", MC1.acceptance_ratio);
+    fprintf(info, "\nCutoff used for the local cluster analysis: %f", LCA_cutoff);
+    fprintf(info, "\nl2[0] = %0.11f\tl2[1] = %0.11f\tl2[2] = %0.11f\tl2[3] = %0.11f\tl2[4] = %0.11f\tl2[5] = %0.11f",
+            MC1.l2[0], MC1.l2[1], MC1.l2[2], MC1.l2[3], MC1.l2[4], MC1.l2[5]);
+    fprintf(info, "\nl3[0] = %0.11f\tl3[1] = %0.11f\tl3[2] = %0.11f\tl3[3] = %0.11f\tl3[4] = %0.11f\tl3[5] = %0.11f\n",
+            MC1.l3[0], MC1.l3[1], MC1.l3[2], MC1.l3[3], MC1.l3[4], MC1.l3[5]);
 
     
     // save the last position of every particle, to use in a later run
@@ -139,8 +169,8 @@ int main(int argc, char** argv)
     for (int i=0; i<3*N; i++)
         fprintf(last_state, "%0.12f,", MC1.Rfinal[i]);
     
-    fclose(last_state); fclose(wall); fclose(info);
-    free(R0); free(W);
+    fclose(last_state); fclose(info);
+    free(R0); free(W); free(MC1.ACF.data);
     
     return 0;
 }

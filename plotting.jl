@@ -1,8 +1,8 @@
 using Statistics, CSVFiles, DataFrames, Printf, PyCall, ProgressMeter, FFTW
 pygui(:qt); import PyPlot: pygui
-using Plots, StatPlots
+using Plots, StatsPlots
 pygui(:qt)
-pyplot(size=(800, 600))
+pyplot(size=(600, 400))
 fnt = "overpass-regular"
 default(titlefont=Plots.font(fnt,24), guidefont=Plots.font(fnt,20), tickfont=Plots.font(fnt,12),
  legendfont=Plots.font(fnt,12))
@@ -36,7 +36,6 @@ function make3Dplot(A::Array{Float64,1}; T=-1.0, L=-1.0, Lz=-1.0, we=zeros(3,3),
     end
 end
 
-
 function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, L = -1.0, Lz = -1.0, save=true, reuse=true)
     #Plots.default(size=(800,600))
     N = Int(size(M,1)/3)
@@ -54,27 +53,6 @@ function make2DtemporalPlot(M::Array{Float64,2}; T=-1.0, L = -1.0, Lz = -1.0, sa
     end
     file = string("./Plots/temporal2D_",N,"_T",T,"_d",rho,".pdf")
     save && savefig(file)
-end
-
-# makes an mp4 video made by a lot of 3D plots (can be easily modified to produce a gif instead)
-# don't run this with more than ~1000 frames unless you have a lot of spare time...
-function makeVideo(M; T=-1, L = -1.0, Lz = -1.0, fps = 20)
-    close("all")
-    Plots.default(size=(1280,1080))
-    N = Int(size(M,1)/3)
-    rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-    #rho==-1 ? L = cbrt(N/(2*maximum(M))) : L = cbrt(N/rho)
-    println("\nI'm cooking pngs to make a nice video. It will take some time...")
-    prog = Progress(size(M,2), dt=1, barglyphs=BarGlyphs("[=> ]"), barlen=50)  # initialize progress bar
-
-    anim = @animate for i =1:size(M,2)
-        Plots.scatter(M[1:3:3N-2,i], M[2:3:3N-1,i], M[3:3:3N,i], m=(10,0.9,:blue,Plots.stroke(0)), w=7,
-         xaxis=("x",(-L/2,L/2)), yaxis=("y",(-L/2,L/2)), zaxis=("z",(-Lz/2,Lz/2)), leg=false)
-        next!(prog) # increment the progress bar
-    end
-    file = string("./Video/LJ",N,"_T",T,"_d",rho,".mp4")
-    mp4(anim, file, fps = fps)
-    gui() #show the last frame in a separate window
 end
 
 function acf(H::Array{Float64,1}, k_max::Int64)
@@ -96,21 +74,15 @@ function acf(H::Array{Float64,1}, k_max::Int64)
 end
 
 function fft_acf(H::Array{Float64,1}, k_max::Int)
-
-    Z = H .- mean(H)
-    fvi = rfft(Z)
+    fvi = rfft(H .- mean(H))
     acf = ifft(fvi .* conj.(fvi))
     acf = real.(acf)
-
     return acf[1:k_max]./acf[1]
 end
 
 function acf_spectrum(H::Array{Float64,1}, k_max::Int)
-
-    Z = H .- mean(H)
-    fvi = rfft(Z)
+    fvi = rfft(H .- mean(H))
     acf = real.(fvi .* conj.(fvi))
-
     return acf[1:k_max]
 end
 
@@ -119,16 +91,17 @@ mass = mass_mol / 6.022e23  # g
 
 N = 108
 M = 3
-if N==108
-    L = 33#30
-    Lz = 200#200#70
-else
+if N==32
     L = 34#30
     Lz = 70#70
+else
+    L = 33#30
+    Lz = 200#200#70
 end
-gamma = 0.7
+gamma = 1.0
 rho = round(Int, 10000*N/(L*L*Lz)) / 10000
-T = 2.1
+rho_s = @sprintf "%0.4f" rho
+T = 1.05
 
 parameters = @sprintf "_N%d_M%d_r%0.4f_T%0.2f" N M rho T;
 cd(string("$(ENV["HOME"])/Programming/C/MonteCarlo-Surfacer/Data/data", parameters))
@@ -141,8 +114,9 @@ C_H = DataFrame(load(string("./autocorrelation", parameters, "_rank0.csv")))
 lD = DataFrame(load(string("./local", parameters, "_rank0.csv")))
 sum(lD.n) // length(dfd.E) # check sul numero totale di particelle raccolte
 
+maxsteps = 5*10^5
 gather_length = length(dfd.E)
-gather_lapse = round(Int, 18*10^6/gather_length)
+gather_lapse = round(Int, maxsteps/gather_length)
 #lD[:n] = lD[:n] / numData
 
 
@@ -193,33 +167,38 @@ end
 
 X = LinRange(-L/2, L/2, nd);
 
-contourf(X, X, LD_parz_impilata[:,:,4], aspect_ratio=1, title="Z 4/7", reuse=false)
+Plots.contourf(X, X, LD_parz_impilata[:,:,4], aspect_ratio=1, title="Z 4/7", reuse=false)
 #contour(X, X, LD_parz_impilata[:,:,2], reuse=false)
 
 ## Grafico con fette in subplots di densità
 data = [LD_parz_impilata[:,:,i] for i in [1,2,3,5,6,7]]
-p1 = contourf(X, X, LD_parz_impilata[:,:,1], aspect_ratio=1);
-p2 = contourf(X, X, LD_parz_impilata[:,:,2], aspect_ratio=1);
-p3 = contourf(X, X, LD_parz_impilata[:,:,3], aspect_ratio=1);
-p5 = contourf(X, X, LD_parz_impilata[:,:,5], aspect_ratio=1);
-p6 = contourf(X, X, LD_parz_impilata[:,:,6], aspect_ratio=1);
-p7 = contourf(X, X, LD_parz_impilata[:,:,7], aspect_ratio=1);
-plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
+p1 = Plots.contourf(X, X, LD_parz_impilata[:,:,1], aspect_ratio=1);
+p2 = Plots.contourf(X, X, LD_parz_impilata[:,:,2], aspect_ratio=1);
+p3 = Plots.contourf(X, X, LD_parz_impilata[:,:,3], aspect_ratio=1);
+p5 = Plots.contourf(X, X, LD_parz_impilata[:,:,5], aspect_ratio=1);
+p6 = Plots.contourf(X, X, LD_parz_impilata[:,:,6], aspect_ratio=1);
+p7 = Plots.contourf(X, X, LD_parz_impilata[:,:,7], aspect_ratio=1);
+Plots.plot(p1,p2,p3,p7,p6,p5, layout=(2, 3), title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
 title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
 
 ## Grafico con fette in subplots di mobility
 data = [mobility_part[:,:,i] for i in [1,2,3,5,6,7]]
 minm = minimum(mobility_part[:])
-p1 = contourf(X, X, mobility_part[:,:,1], clims=[minm,1.], aspect_ratio=1);
-p2 = contourf(X, X, mobility_part[:,:,2], clims=[minm,1.], aspect_ratio=1);
-p3 = contourf(X, X, mobility_part[:,:,3], clims=[minm,1.], aspect_ratio=1);
-p5 = contourf(X, X, mobility_part[:,:,5], clims=[minm,1.], aspect_ratio=1);
-p6 = contourf(X, X, mobility_part[:,:,6], clims=[minm,1.], aspect_ratio=1);
-p7 = contourf(X, X, mobility_part[:,:,7], clims=[minm,1.], aspect_ratio=1);
-plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), clims=[minm,1.],
+p1 = Plots.contourf(X, X, mobility_part[:,:,1], clims=[minm,1.], aspect_ratio=1);
+p2 = Plots.contourf(X, X, mobility_part[:,:,2], clims=[minm,1.], aspect_ratio=1);
+p3 = Plots.contourf(X, X, mobility_part[:,:,3], clims=[minm,1.], aspect_ratio=1);
+p5 = Plots.contourf(X, X, mobility_part[:,:,5], clims=[minm,1.], aspect_ratio=1);
+p6 = Plots.contourf(X, X, mobility_part[:,:,6], clims=[minm,1.], aspect_ratio=1);
+p7 = Plots.contourf(X, X, mobility_part[:,:,7], clims=[minm,1.], aspect_ratio=1);
+Plots.plot(p1, p2, p3, p7, p6, p5, layout=(2, 3), clims=[minm,1.],
  title=["Z 1/7" "Z 2/7" "Z 3/7" "Z 7/7" "Z 6/7" "Z 5/7"],
  title_location=:center, left_margin=[0mm 0mm], bottom_margin=16px, xrotation=60, reuse=false)
 
+p1 = Plots.contourf(X, X, mobility_part[:,:,1], clims=[minm,1.], aspect_ratio=1);
+p7 = Plots.contourf(X, X, mobility_part[:,:,7], clims=[minm,1.], aspect_ratio=1);
+Plots.plot(p1, p7, layout=(1, 2), clims=[minm,1.], title=["Z 1/7" "Z 7/7"],
+ title_location=:center, left_margin=[0mm 0mm], bottom_margin=36px, xrotation=60,
+  size=(600,300), reuse=false)
 
 ## wall potential
 Ebound = zeros(M,M)
@@ -252,7 +231,7 @@ make3Dplot(X0, L=L, Lz=Lz, T=T, we = WallWidth, reuse=false)
 # end
 
 W = LinRange(-L/2, L/2, M)
-contour(W, W, Ebound, fill=true, reuse=false, legend=true)
+Plots.contour(W, W, Ebound, fill=true, reuse=false, legend=true, aspect_ratio=1, size=(200,200))
 
 
 ## Ebound - Condensed particles
@@ -267,19 +246,21 @@ plot(vcat(Ebound...), vcat(nuclei...))
 
 ## Check energy, pressure and ar
 pyplot(size=(400, 300))
-Plots.plot(1:100*gather_lapse:length(dfd.E)*gather_lapse, dfd.E[1:100:end],
+Plots.plot(1:50*gather_lapse:length(dfd.E)*gather_lapse, dfd.E[1:50:end],
  linewidth=0.5, xlabel = "n", ylabel="E",reuse=false, legend=false)
 Plots.plot(dfd.P[1:10:end], linewidth=0.5, reuse=false, legend=false)
 Plots.scatter(dfd.jj[1:10:end]./N, linewidth=0.5, reuse=false, legend=false)
 gui()
 
-plot(1:20:length(C_H.CH), C_H.CH[1:20:end], xaxis = ("k", (-2*10^4,length(C_H.CH))), legend=false)
+Plots.plot(1:4:length(C_H.CH), C_H.CH[1:4:end], xaxis = ("k", (-3*10^4,length(C_H.CH))),
+ yaxis = ("acf", (-0.05, 0.25)), linewidth=0.5, legend=false)
 kmax = floor(Int, gather_length/2)
-plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
 acf_pds = abs.(rfft(C_H.CH))
-plot(1:10:length(acf_pds), acf_pds[1:10:end], yaxis = (:log10, (0.1,Inf)))
-gui()
-plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C_H.CH)/2)],
+Plots.plot(4:2:length(acf_pds), acf_pds[4:2:end], xaxis = :log10, yaxis = (:log10, (0.1,Inf)),
+ linewidth=0.5, legend=false)
+
+Plots.plot(1:kmax, acf_spectrum(dfd.E, kmax), xaxis = (:log10, (1,kmax)), yaxis = (:log10, (1,Inf)))
+Plots.plot([1:1:round(Int,length(C_H.CH)/2)], abs.(fft(C_H.CH))[1:1:round(Int,length(C_H.CH)/2)],
  xaxis = ("k", (1,length(C_H.CH)/2-1)), yaxis = ("pds", (0,80)))
 
 
@@ -305,4 +286,46 @@ text!(campixel(p2), "contour3d", position = widths(p2) .* Vec(0.5, 1), align=(:c
 scene
 
 gui()
-volume(LD./maximum(LD), algorithm = :mip)
+
+scene = Scene(resolution = (600, 750))
+X = LinRange(-L/2, L/2, nd);
+Y = LinRange(-L/2, L/2, nd);
+Z = LinRange(-Lz/8, Lz/8, nd);
+Makie.volume(X,Y,Z, LD./maximum(LD), algorithm = :mip)
+
+record(scene, "test.mp4") do io
+    for i = 1:100
+        scene.plots[:color] = ...# animate scene
+        recordframe!(io) # record a new frame
+    end
+end
+
+
+
+
+
+using ImageMagick, Makie
+
+result = let
+    function cartesian(ll)
+        return Point3f0(
+            cos(ll[1]) * sin(ll[2]),
+            sin(ll[1]) * sin(ll[2]),
+            cos(ll[2])
+        )
+    end
+    fract(x) = x - floor(x)
+    start = time()
+    t = (time() - start) * 100
+    scene = Makie.volume(X,Y,Z, LD./maximum(LD), algorithm = :mip, resolution = (600, 750))
+    eyepos = Vec3f0(60, 50, 60)
+    lookat = Vec3f0(0)
+    update_cam!(scene, eyepos, lookat)
+    l = scene[1]
+    N = 240
+    record(scene, "/animation.mkv", 1:N) do i
+        t = (time() - start) * 700
+        rotate_cam!(scene, 0.0, 0.05, 0.03)
+   end
+end
+output(result)
