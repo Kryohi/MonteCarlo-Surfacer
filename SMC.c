@@ -1,7 +1,7 @@
 
 /* TODO
  * 
- * Raggio LJ più corto con correzioni di coda
+ * Correzioni di coda
  * fixare LCA (memory leak?)
  * voxel cubici vicino a pareti e gap grosso in mezzo?
  * localDensity con numero minore di divisioni lungo z, più fino vicino a pareti
@@ -137,13 +137,13 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
         if ((n+1) % gather_lapse == 0)  {
             int k = (int)((n+1)/gather_lapse);
             
-            //P[k] = pressure(R, L, Lz) + wallsPressure(R, W, L, Lz);
+            P[k] = pressure(R, L, Lz) + wallsPressure(R, W, L, Lz);
             localDensityAndMobility(R, L, Lz, lD, Rbin, Mu);
             
             if (k % LCA_TIME == 0)
             {   // sarebbe da calcolare in modo simile a local density, solo con strati lungo z
                 clusterAnalysis(R, N, L, clusters_global);
-                for (int i=0; i<(N*N-N)/2; i++)  
+                for (int i=0; i<(N*N-N)/2; i++)
                 { 
                     if (clusters_global[3*i] !=0)   {
                         l1 += 1 / (gather_steps/LCA_TIME);
@@ -166,7 +166,7 @@ struct Sim sMC(double L, double Lz, double T, double A, const double *W, const d
                 
                 // dump of the local density in the last million or so steps
                 printf("\rStoring the latest density distribution at %d steps... ", n+1);
-                fflush(stdout);
+                //fflush(stdout);
                 
                 for (int i=0; i<Ncx; i++)    {
                     for (int j=0; j<Ncx; j++)    {
@@ -552,14 +552,15 @@ inline int boundsCheck(double *r, double L, double Lz)
 
 /*
  * Calculate the potential energy of particle i with respect to other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4
 */
 
 double energySingle(const double *r, double L, int i)
 {
     double V = 0.0;
     double dx, dy, dz, dr2, dr6;
-    for (int l=0; l<N; l++)  
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
+    
+    for (int l=0; l<N; l++)
     {
         if (l != i)   
         {
@@ -571,7 +572,7 @@ double energySingle(const double *r, double L, int i)
             //dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dy*dy + dz*dz;
             
-            if (dr2 < L*L/4.0)
+            if (dr2 < cutoff2)
             {
                 dr6 = dr2*dr2*dr2;
                 V += 1.0/(dr6*dr6) - 1.0/dr6;
@@ -584,10 +585,10 @@ double energySingle(const double *r, double L, int i)
 
 /*
  * Calculate the forces acting on particle i due to the interaction with other particles
- * da rendere "2D" in simulazione finale, ovvero condizione diventa dx^2 + dy^2 < L*L/4 (?)
 */
 void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, double *Fz) 
 {
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
     double dx, dy, dz, dr2, dr8, dV;
     *Fx = 0.0;
     *Fy = 0.0;
@@ -604,7 +605,7 @@ void forceSingle(const double *r, double L, int i, double *Fx, double *Fy, doubl
             dz = r[3*i+2] - r[3*l+2];
             //dz = dz - Lz*rint(dz/Lz); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4.0)
+            if (dr2 < cutoff2)
             {
                 dr8 = dr2*dr2*dr2*dr2;
                 dV = 48.0/(dr8*dr2*dr2*dr2) - 24.0/dr8 ;    // -(dV/dr) / dr
@@ -626,6 +627,8 @@ double energy(const double *r, double L)
 {
     double V = 0.0;
     double dx, dy, dz, dr2;
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
+    
     for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
@@ -635,7 +638,7 @@ double energy(const double *r, double L)
             dz = r[3*l+2] - r[3*i+2];
             //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)
+            if (dr2 < cutoff2)
                 V += 1.0/(dr2*dr2*dr2*dr2*dr2*dr2) - 1.0/(dr2*dr2*dr2);
         }
     }
@@ -653,6 +656,7 @@ double energy(const double *r, double L)
 void forces(const double *r, double L, double *F)
 {
     double dx, dy, dz, dr2, dr8, dV;
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
 
     for (int l=1; l<N; l++)  
     {
@@ -665,7 +669,7 @@ void forces(const double *r, double L, double *F)
             dz = r[3*l+2] - r[3*i+2];
             //dz = dz - L*rint(dz/L); // le particelle oltre la parete vanno sentite?
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)    
+            if (dr2 < cutoff2)    
             {
                 //dV = der_LJ(sqrt(dr2))
                 dr8 = dr2*dr2*dr2*dr2;
@@ -693,6 +697,8 @@ double pressure(const double *r, double L, double Lz)
 {
     double P = 0.0;
     double dx, dy, dz, dr2, dr6;
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
+    
     for (int l=1; l<N; l++)  {
         for (int i=0; i<l; i++)   {
             dx = r[3*l] - r[3*i];
@@ -702,7 +708,7 @@ double pressure(const double *r, double L, double Lz)
             dz = r[3*l+2] - r[3*i+2];
             //dz = dz - L*rint(dz/L);
             dr2 = dx*dx + dy*dy + dz*dz;
-            if (dr2 < L*L/4)    
+            if (dr2 < cutoff2)    
             {
                 //P += 24*pow(dr2,-3.) - 48*pow(dr2,-6.);
                 dr6 = dr2*dr2*dr2;
@@ -725,6 +731,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
     double V = 0.0;
     double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;    // distance between two wall elements
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
     
     dz = rz + Lz/2;
     dz = dz - Lz*rint(dz/Lz);
@@ -745,7 +752,7 @@ double wallsEnergySingle(double rx, double ry, double rz, const double * W, doub
             
             dr2 = dx*dx + dy*dy + dz*dz;
         
-            if (dr2 < L*L/4.0)
+            if (dr2 < cutoff2)
             {
                 dr6 = dr2*dr2*dr2;
                 V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
@@ -767,11 +774,12 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
 { 
     double dx, dy, dz, dr2, dr8, dz8, dV;
     double dw = L/M;    // distance between consecutive wall potential sources
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
     
     // se rz è positivo, rint dà 1 e la distanza è calcolata da parete sopra. 
     // Infatti dz = (rz-L/2) < 0, forza "in direzione" delle z negative
     // se rz è negativo, dz = (rz+L/2) > 0
-    // TODO controllare segno e/o casi in cui potrebbe dare risultati non voluti
+    // TODO riricontrollare segno e/o casi in cui potrebbe dare risultati non voluti
     dz = rz + Lz/2.0;
     dz = dz - Lz*rint(dz/Lz);
     if (rz <= -Lz/2.0) dz = 0.0001;
@@ -792,7 +800,7 @@ void wallsForce(double rx, double ry, double rz, const double * W, double L, dou
             
             dr2 = dx*dx + dy*dy + dz*dz;
         
-            if (dr2 < L*L/4)
+            if (dr2 < cutoff2)
             {
                 dr8 = dr2*dr2*dr2*dr2;
                 dV = 48.0 * W[2*m] / (dr8*dr2*dr2*dr2) - 24.0 * W[2*m+1] / dr8; //(-dV/dr)/r
@@ -816,6 +824,7 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
     double V = 0.0;
     double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
     
     for (int n=0; n<N; n++)  
     {
@@ -838,7 +847,7 @@ double wallsEnergy(const double *r, const double *W, double L, double Lz)
                 
                 dr2 = dx*dx + dy*dy + dz*dz;
         
-                if (dr2 < L*L/4)
+                if (dr2 < cutoff2)
                 {
                     dr6 = dr2*dr2*dr2;
                     V += W[2*m]/(dr6*dr6) - W[2*m+1]/dr6;
@@ -855,6 +864,7 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
     double P = 0.0;
     double dx, dy, dz, dr2, dr6, dz6;
     double dw = L/M;
+    double cutoff2 = LJ_CUTOFF*LJ_CUTOFF;
     
     for (int i=0; i<M; i++) 
     {
@@ -871,7 +881,7 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
                 dz = dz - Lz*rint(dz/Lz);
                 dr2 = dx*dx + dy*dy + dz*dz;
             
-                if (dr2 < L*L/4)
+                if (dr2 < cutoff2)
                 {
                     dr6 = dr2*dr2*dr2;
                     P += 24.0*W[2*m+1]/dr6 - 48.0*W[2*m]/(dr6*dr6);
@@ -883,6 +893,7 @@ double wallsPressure(const double *r, const double * W, double L, double Lz)
     }
     return -P/(3*L*L*Lz);
 }
+
 
 
 

@@ -97,7 +97,7 @@ int main(int argc, char** argv)
    
     snprintf(filename, 64, "./last_state_N%d_M%d_r%0.4f_T%0.2f.csv", N, M, rho, T);
     
-    if (access( filename, F_OK ) != -1 && 0==1) //TODO verify everything works and remove 0==1
+    if (access( filename, F_OK ) != -1)// && 0==1) //TODO verify everything works and remove 0==1
     {
         printf("\nUsing previously saved particle configuration...");
         FILE * last_state;

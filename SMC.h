@@ -32,8 +32,14 @@
 #define a0 5.960464477539063e-9
 #define b0 2.44140625e-5
 
-// Lennard-Jones cut-off (units of sigma) //TODO use this
-#define LJ_CUTOFF 3.0
+// Lennard-Jones cut-off (units of sigma)
+#define TRUNCATE 1
+#if TRUNCATE==1
+    #define LJ_CUTOFF 3.0
+#else
+    #define LJ_CUTOFF (L/2)
+#endif
+
 
 // Lapse for writing to positions.csv and local_temp.csv (gets multiplied by gather_lapse)
 #define STORAGE_TIME 1000 //25000
